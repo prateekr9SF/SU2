@@ -31,7 +31,7 @@ except Exception:
 # -----------------------------
 # Inputs
 # -----------------------------
-VTU_FILE = "surface_flow.vtu"
+VTU_FILE = "surface_deformed.vtu"
 
 BOX_PREFIX = "WING"
 BOX_NAME = f"{BOX_PREFIX}_SINGLE"
