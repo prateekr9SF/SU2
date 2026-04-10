@@ -6853,7 +6853,7 @@ void CConfig::SetOutput(SU2_COMPONENT val_software, unsigned short val_izone) {
 
   }
 
-  if ( (val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO) {
+  if ( (val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO)) {
 
     auto PrintLimiterInfo = [&](const LIMITER kind_limiter) {
       cout << "Second order integration in space, with slope limiter.\n";
@@ -7357,7 +7357,7 @@ void CConfig::SetOutput(SU2_COMPONENT val_software, unsigned short val_izone) {
 
   cout << endl <<"-------------------- Output Information ( Zone "  << iZone << " ) ----------------------" << endl;
 
-  if ((val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO) {
+  if ((val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO)) {
 
     if (nVolumeOutputFiles != 0) {
       cout << "File writing frequency: " << endl;
