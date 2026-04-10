@@ -25,12 +25,14 @@
  * License along with SU2. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../../include/drivers/CSinglezoneDriver.hpp"
+#include "../../include/drivers/CStaticMDODriver.hpp"
 #include "../../include/definition_structure.hpp"
 #include "../../include/output/COutput.hpp"
 #include "../../include/iteration/CIteration.hpp"
 
-CSinglezoneDriver::CSinglezoneDriver(char* confFile,
+#include "../../include/coupling/precice.hpp"
+
+CStaticMDODriver::CStaticMDODriver(char* confFile,
                        unsigned short val_nZone,
                        SU2_Comm MPICommunicator) : CDriver(confFile,
                                                           val_nZone,
@@ -41,9 +43,10 @@ CSinglezoneDriver::CSinglezoneDriver(char* confFile,
   TimeIter = 0;
 }
 
-CSinglezoneDriver::~CSinglezoneDriver() = default;
+CStaticMDODriver::~CStaticMDODriver() = default;
 
-void CSinglezoneDriver::StartSolver() {
+void CSinglezoneDriver::StartSolver() 
+{
 
   StartTime = SU2_MPI::Wtime();
 
@@ -54,12 +57,23 @@ void CSinglezoneDriver::StartSolver() {
   if (rank == MASTER_NODE)
     cout << endl <<"------------------------------ Begin Solver -----------------------------" << endl;
 
-  if (rank == MASTER_NODE){
-    cout << endl <<"Simulation Run using the Single-zone Driver" << endl;
+  if (rank == MASTER_NODE)
+  {
+    cout << endl <<"Simulation Run using the Static Aeroelasticity Driver" << endl;
     if (driver_config->GetTime_Domain())
       cout << "The simulation will run for "
            << driver_config->GetnTime_Iter() - config_container[ZONE_0]->GetRestart_Iter() << " time steps." << endl;
   }
+
+  if (rank == MASTER_NODE)
+  {
+    cout << "--------------------------------------------- Initialize Coupling Interface -----------------------------------" << endl;
+  }
+
+  precice = new Precice(config_container[ZONE_0] ->GetpreCICE>ConfigFileName(), rank, size, config_container, geometry_container, solver_container, grid_movement);
+  dt = new double(1);
+
+  max_precice_dt = new double(precice->initialize());
 
   /*--- Set the initial time iteration to the restart iteration. ---*/
   if (config_container[ZONE_0]->GetRestart() && driver_config->GetTime_Domain())
@@ -74,7 +88,7 @@ void CSinglezoneDriver::StartSolver() {
 
     /*--- Run a time-step iteration of the single-zone problem. ---*/
 
-    Run();
+    RunSMDO();
 
     /*--- Perform some postprocessing on the solution before the update ---*/
 
@@ -100,9 +114,11 @@ void CSinglezoneDriver::StartSolver() {
 
   }
 
+  delete precice;
+
 }
 
-void CSinglezoneDriver::Preprocess(unsigned long TimeIter) {
+void CStaticMDODriver::Preprocess(unsigned long TimeIter) {
 
   /*--- Set the current time iteration in the config and also in the driver
    * because the python interface doesn't offer an explicit way of doing it. ---*/
@@ -153,7 +169,7 @@ void CSinglezoneDriver::Preprocess(unsigned long TimeIter) {
 
 }
 
-void CSinglezoneDriver::Run() {
+void CStaticMDODriver::Run() {
 
   unsigned long OuterIter = 0;
   config_container[ZONE_0]->SetOuterIter(OuterIter);
@@ -164,7 +180,7 @@ void CSinglezoneDriver::Run() {
 
 }
 
-void CSinglezoneDriver::Postprocess() {
+void CStaticMDODriver::Postprocess() {
 
   iteration_container[ZONE_0][INST_0]->Postprocess(output_container[ZONE_0], integration_container, geometry_container, solver_container,
       numerics_container, config_container, surface_movement, grid_movement, FFDBox, ZONE_0, INST_0);
@@ -177,7 +193,7 @@ void CSinglezoneDriver::Postprocess() {
 
 }
 
-void CSinglezoneDriver::Update() {
+void CStaticMDODriver::Update() {
 
   iteration_container[ZONE_0][INST_0]->Update(output_container[ZONE_0], integration_container, geometry_container,
         solver_container, numerics_container, config_container,
@@ -185,7 +201,7 @@ void CSinglezoneDriver::Update() {
 
 }
 
-void CSinglezoneDriver::Output(unsigned long TimeIter) {
+void CStaticMDODriver::Output(unsigned long TimeIter) {
 
   /*--- Time the output for performance benchmarking. ---*/
 
@@ -221,7 +237,7 @@ void CSinglezoneDriver::Output(unsigned long TimeIter) {
   config_container[ZONE_0]->Set_StartTime(StartTime);
 }
 
-void CSinglezoneDriver::DynamicMeshUpdate(unsigned long TimeIter) {
+void CStaticMDODriver::DynamicMeshUpdate(unsigned long TimeIter) {
 
   auto iteration = iteration_container[ZONE_0][INST_0];
 
@@ -246,7 +262,7 @@ void CSinglezoneDriver::DynamicMeshUpdate(unsigned long TimeIter) {
   }
 }
 
-bool CSinglezoneDriver::Monitor(unsigned long TimeIter){
+bool CStaticMDODriver::Monitor(unsigned long TimeIter){
 
   unsigned long nInnerIter, InnerIter, nTimeIter;
   su2double MaxTime, CurTime;
@@ -309,6 +325,6 @@ bool CSinglezoneDriver::Monitor(unsigned long TimeIter){
   return StopCalc;
 }
 
-bool CSinglezoneDriver::GetTimeConvergence() const{
+bool CStaticMDODriver::GetTimeConvergence() const{
   return output_container[ZONE_0]->GetCauchyCorrectedTimeConvergence(config_container[ZONE_0]);
 }

@@ -35,7 +35,7 @@
 
 CDiscAdjSinglezoneDriver::CDiscAdjSinglezoneDriver(char* confFile,
                                                    unsigned short val_nZone,
-                                                   SU2_Comm MPICommunicator) : CSinglezoneDriver(confFile,
+                                                   SU2_Comm MPICommunicator) : CStaticMDODriver(confFile,
                                                                                                  val_nZone,
                                                                                                  MPICommunicator) {
 

@@ -1,7 +1,7 @@
 /*!
  * \file SU2_CFD.cpp
  * \brief Main file of the SU2 Computational Fluid Dynamics code
- * \author F. Palacios, T. Economon
+ * \author F. Palacios, T. Economon, P. Ranjan
  * \version 8.0.1 "Harrier"
  *
  * SU2 Project Website: https://su2code.github.io
@@ -25,7 +25,7 @@
  * License along with SU2. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "../include/SU2_CFD.hpp"
+#include "../include/SU2_MDO.hpp"
 
 /* LIBXSMM include files, if supported. */
 #ifdef HAVE_LIBXSMM
@@ -105,6 +105,13 @@ int main(int argc, char *argv[]) {
   const bool multizone = config.GetMultizone_Problem();
   const bool harmonic_balance = (config.GetTime_Marching() == TIME_MARCHING::HARMONIC_BALANCE);
 
+  const bool MDO_steady = config.GetSMDO_Mode()
+
+  if (MDO_steady)
+  {
+    driver = new CStaticMDODriver(config_file_name, nZone, MPICommunicator);
+  }
+
   if (dry_run) {
 
     /*--- Dry Run. ---*/
@@ -121,7 +128,7 @@ int main(int argc, char *argv[]) {
       driver = new CDiscAdjSinglezoneDriver(config_file_name, nZone, MPICommunicator);
     }
     else {
-      driver = new CSinglezoneDriver(config_file_name, nZone, MPICommunicator);
+      driver = new CStaticMDODriver(config_file_name, nZone, MPICommunicator);
     }
 
   }

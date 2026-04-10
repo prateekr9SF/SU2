@@ -68,6 +68,7 @@ enum class SU2_COMPONENT {
   SU2_DOT, /*!< \brief Running the SU2_DOT software. */
   SU2_GEO, /*!< \brief Running the SU2_GEO software. */
   SU2_SOL  /*!< \brief Running the SU2_SOL software. */
+  SU2_MDO  /*!< \brief Running the SU2_MDO software. */
 };
 
 const unsigned int EXIT_DIVERGENCE = 2;   /*!< \brief Exit code (divergence). */
@@ -749,6 +750,7 @@ enum ENUM_GRIDMOVEMENT {
   ROTATING_FRAME = 8,       /*!< \brief Simulation in a rotating frame. */
   STEADY_TRANSLATION = 11,  /*!< \brief Simulation in a steadily translating frame. */
   GUST = 12,                /*!< \brief Simulation on a static mesh with a gust. */
+  PRECICE_MOVEMENT = 15      /*!< \brief Simulation on a an aeroelastic mesh through CalTop */
 };
 static const MapType<std::string, ENUM_GRIDMOVEMENT> GridMovement_Map = {
   MakePair("NONE", NO_MOVEMENT)
@@ -756,6 +758,7 @@ static const MapType<std::string, ENUM_GRIDMOVEMENT> GridMovement_Map = {
   MakePair("ROTATING_FRAME", ROTATING_FRAME)
   MakePair("STEADY_TRANSLATION", STEADY_TRANSLATION)
   MakePair("GUST", GUST)
+  MakePair("PRECICE_MOVEMENT", PRECICE_MOVEMENT)
 };
 
 enum ENUM_SURFACEMOVEMENT {
@@ -765,6 +768,7 @@ enum ENUM_SURFACEMOVEMENT {
   AEROELASTIC_RIGID_MOTION = 4,  /*!< \brief Simulation with rotation and aeroelastic motion. */
   EXTERNAL = 6,                  /*!< \brief Simulation with external motion. */
   EXTERNAL_ROTATION = 7,         /*!< \brief Simulation with external rotation motion. */
+  MDO_SURFACE = 8 ,             /*!< \breif MDO with external FEA solver .*/
 };
 static const MapType<std::string, ENUM_SURFACEMOVEMENT> SurfaceMovement_Map = {
   MakePair("DEFORMING", DEFORMING)
@@ -773,6 +777,7 @@ static const MapType<std::string, ENUM_SURFACEMOVEMENT> SurfaceMovement_Map = {
   MakePair("AEROELASTIC", AEROELASTIC)
   MakePair("EXTERNAL", EXTERNAL)
   MakePair("EXTERNAL_ROTATION", EXTERNAL_ROTATION)
+  MakePair("MDO_SURFACE", MDO_SURFACE)
 };
 
 /*!

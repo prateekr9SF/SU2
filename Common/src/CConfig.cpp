@@ -587,6 +587,20 @@ void CConfig::addPythonOption(const string& name) {
   option_map.insert(pair<string, COptionBase *>(name, val));
 }
 
+
+bool CConfig::GetpreCICE_Usage(void) { return precice_usage; }
+
+bool CConfig::GetpreCICE_VerbosityLevel_High(void) { return precice_verbosityLevel_high; }
+
+bool CConfig::GetpreCICE_LoadRamping(void) { return precice_loadRamping; }
+
+string CConfig::GetpreCICE_ConfigFileName(void) { return preciceConfigFileName; }
+
+
+unsigned long CConfig::GetpreCICE_LoadRampingDuration(void) { return precice_loadRampingDuration; }
+
+unsigned long CConfig::GetpreCICE_NumberWetSurfaces(void) { return precice_numberWetSurfaces; }
+
 unsigned short CConfig::GetnZone(const string& val_mesh_filename, unsigned short val_format) {
 
   int nZone = 1; /* Default value if nothing is specified. */
@@ -2952,6 +2966,28 @@ void CConfig::SetConfig_Options() {
   /*!\brief ROM_SAVE_FREQ \n DESCRIPTION: How often to save snapshots for unsteady problems.*/
   addUnsignedShortOption("ROM_SAVE_FREQ", rom_save_freq, 1);
 
+  /*!\ brief COUPLING FLAG \n DESCRIPTION: Activate preCICE for FSI coupling */
+  addBoolOption("PRECICE_USAGE", precice_usage, false);
+
+  addBoolOption("STEADY_MDO", Steady_MDO, false);
+
+
+  /* DESCRIPTION: Activate high verbosity level of preCICE adapter for FSI coupling */
+  addBoolOption("PRECICE_VERBOSITYLEVEL_HIGH", precice_verbosityLevel_high, false);
+
+  /* DESCRIPTION:  preCICE configuration file name */
+  addStringOption("PRECICE_CONFIG_FILENAME", preciceConfigFileName, string("precice.xml"));
+
+  /* DESCRIPTION:  preCICE wet surface marker name (specified in the mesh file) */
+  addStringOption("PRECICE_WETSURFACE_MARKER_NAME", preciceWetSurfaceMarkerName, string("wetSurface"));
+
+  /* DESCRIPTION: Number of wet surfaces in the preCICE FSI simulation. */
+  addUnsignedLongOption("PRECICE_NUMBER_OF_WETSURFACES", precice_numberWetSurfaces, 1);
+
+
+
+
+
   /* END_CONFIG_OPTIONS */
 
 }
@@ -3256,6 +3292,7 @@ void CConfig::SetHeader(SU2_COMPONENT val_software) const{
     case SU2_COMPONENT::SU2_DOT: cout << "|   |___/\\___//___|   Suite (Gradient Projection Code)                  |\n"; break;
     case SU2_COMPONENT::SU2_GEO: cout << "|   |___/\\___//___|   Suite (Geometry Definition Code)                  |\n"; break;
     case SU2_COMPONENT::SU2_SOL: cout << "|   |___/\\___//___|   Suite (Solution Exporting Code)                   |\n"; break;
+    case SU2_COMPONENT::SU2_MDO: cout << "|   |___/\\___//___|   Suite (Computational Aeroelasticity code)         |\n"; break;
     }
     cout << "|                                                                       |\n";
     cout << "-------------------------------------------------------------------------\n";
@@ -3817,6 +3854,10 @@ void CConfig::SetPostprocessing(SU2_COMPONENT val_software, unsigned short val_i
     cout << "WARNING: The adjoint solver should use a non-dimensional flow solution." << endl;
   }
 
+  if ((rank == MASTER_NODE) && ContinuousAdjoint && (Ref_NonDim == DIMENSIONAL) && (Kind_SU2 == SU2_COMPONENT::SU2_MDO)) {
+    cout << "WARNING: The adjoint solver should use a non-dimensional flow solution." << endl;
+  }
+
   /*--- Initialize non-physical points/reconstructions to zero ---*/
 
   Nonphys_Points   = 0;
@@ -4128,7 +4169,7 @@ void CConfig::SetPostprocessing(SU2_COMPONENT val_software, unsigned short val_i
    there is no grid motion ---*/
 
   if (GetGrid_Movement()){
-    if ((Kind_SU2 == SU2_COMPONENT::SU2_CFD || Kind_SU2 == SU2_COMPONENT::SU2_SOL) &&
+    if ((Kind_SU2 == SU2_COMPONENT::SU2_CFD || Kind_SU2 == SU2_COMPONENT::SU2_SOL || Kind_SU2 == SU2_COMPONENT::SU2_MDO) &&
         (TimeMarching == TIME_MARCHING::STEADY && !Time_Domain)){
 
       if((Kind_GridMovement != ROTATING_FRAME) &&
@@ -4796,6 +4837,10 @@ void CConfig::SetPostprocessing(SU2_COMPONENT val_software, unsigned short val_i
     SU2_MPI::Error("PHYSICAL_PROBLEM must be set in the configuration file", CURRENT_FUNCTION);
   }
 
+  if ((Kind_SU2 == SU2_COMPONENT::SU2_MDO) && (Kind_Solver == MAIN_SOLVER::NONE)) {
+    SU2_MPI::Error("PHYSICAL_PROBLEM must be set in the configuration file", CURRENT_FUNCTION);
+  }
+
   /*--- Set a flag for viscous simulations ---*/
 
   Viscous = (( Kind_Solver == MAIN_SOLVER::NAVIER_STOKES          ) ||
@@ -4871,6 +4916,43 @@ void CConfig::SetPostprocessing(SU2_COMPONENT val_software, unsigned short val_i
     for (int i=0; i<7; ++i) eng_cyl[i] /= 12.0;
   }
 
+    if ((SystemMeasurements == US) && (Kind_SU2 == SU2_COMPONENT::SU2_MDO)) {
+
+    for (iMarker = 0; iMarker < nMarker_Monitoring; iMarker++) {
+      RefOriginMoment_X[iMarker] = RefOriginMoment_X[iMarker]/12.0;
+      RefOriginMoment_Y[iMarker] = RefOriginMoment_Y[iMarker]/12.0;
+      RefOriginMoment_Z[iMarker] = RefOriginMoment_Z[iMarker]/12.0;
+    }
+
+    for (iMarker = 0; iMarker < nMarker_Moving; iMarker++){
+      for (unsigned short iDim = 0; iDim < 3; iDim++){
+        MarkerMotion_Origin[3*iMarker+iDim] /= 12.0;
+      }
+    }
+
+    RefLength = RefLength/12.0;
+
+    if ((val_nDim == 2) && (!Axisymmetric)) RefArea = RefArea/12.0;
+    else RefArea = RefArea/144.0;
+    Length_Reynolds = Length_Reynolds/12.0;
+    Highlite_Area = Highlite_Area/144.0;
+    SemiSpan = SemiSpan/12.0;
+
+    ea_lim[0] /= 12.0;
+    ea_lim[1] /= 12.0;
+    ea_lim[2] /= 12.0;
+
+    if (Geo_Description != NACELLE) {
+      for (unsigned short iSections = 0; iSections < nLocationStations; iSections++) {
+        LocationStations[iSections] = LocationStations[iSections]/12.0;
+      }
+      geo_loc[0] /= 12.0;
+      geo_loc[1] /= 12.0;
+    }
+
+    for (int i=0; i<7; ++i) eng_cyl[i] /= 12.0;
+  }
+
   if(Turb_Fixed_Values && !OptionIsSet("TURB_FIXED_VALUES_DOMAIN")){
     SU2_MPI::Error("TURB_FIXED_VALUES activated, but no domain set with TURB_FIXED_VALUES_DOMAIN.", CURRENT_FUNCTION);
   }
@@ -4884,6 +4966,14 @@ void CConfig::SetPostprocessing(SU2_COMPONENT val_software, unsigned short val_i
 #ifndef CODI_FORWARD_TYPE
     if (Kind_SU2 == SU2_COMPONENT::SU2_CFD) {
       SU2_MPI::Error("SU2_CFD: Config option DIRECT_DIFF= YES requires AD support.\n"
+                     "Please use SU2_CFD_DIRECTDIFF (meson.py ... -Denable-directdiff=true ...).",
+                     CURRENT_FUNCTION);
+    }
+#endif
+
+#ifndef CODI_FORWARD_TYPE
+    if (Kind_SU2 == SU2_COMPONENT::SU2_MDO) {
+      SU2_MPI::Error("SU2_MDO: Config option DIRECT_DIFF= YES requires AD support.\n"
                      "Please use SU2_CFD_DIRECTDIFF (meson.py ... -Denable-directdiff=true ...).",
                      CURRENT_FUNCTION);
     }
@@ -5265,6 +5355,14 @@ void CConfig::SetPostprocessing(SU2_COMPONENT val_software, unsigned short val_i
   if (DiscreteAdjoint) {
 #if !defined CODI_REVERSE_TYPE
     if (Kind_SU2 == SU2_COMPONENT::SU2_CFD) {
+      SU2_MPI::Error("SU2_CFD: Config option MATH_PROBLEM= DISCRETE_ADJOINT requires AD support!\n"
+                     "Please use SU2_CFD_AD (configuration/compilation is done using the preconfigure.py script).",
+                     CURRENT_FUNCTION);
+    }
+#endif
+
+#if !defined CODI_REVERSE_TYPE
+    if (Kind_SU2 == SU2_COMPONENT::SU2_MDO) {
       SU2_MPI::Error("SU2_CFD: Config option MATH_PROBLEM= DISCRETE_ADJOINT requires AD support!\n"
                      "Please use SU2_CFD_AD (configuration/compilation is done using the preconfigure.py script).",
                      CURRENT_FUNCTION);
@@ -6106,7 +6204,7 @@ void CConfig::SetOutput(SU2_COMPONENT val_software, unsigned short val_izone) {
   bool fea = ((Kind_Solver == MAIN_SOLVER::FEM_ELASTICITY) || (Kind_Solver == MAIN_SOLVER::DISC_ADJ_FEM));
 
   cout << endl <<"----------------- Physical Case Definition ( Zone "  << iZone << " ) -------------------" << endl;
-  if (val_software == SU2_COMPONENT::SU2_CFD) {
+  if ((val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO)) {
     if (FSI_Problem)
      cout << "Fluid-Structure Interaction." << endl;
 
@@ -6307,6 +6405,7 @@ void CConfig::SetOutput(SU2_COMPONENT val_software, unsigned short val_izone) {
         case RIGID_MOTION:    cout << "rigid mesh motion." << endl; break;
         case ROTATING_FRAME:  cout << "rotating reference frame." << endl; break;
         case EXTERNAL:        cout << "externally prescribed motion." << endl; break;
+        case PRECICE_MOVEMENT: cout << "CalTop prescibed movement." <<endl; break;
       }
     }
 
@@ -6696,7 +6795,65 @@ void CConfig::SetOutput(SU2_COMPONENT val_software, unsigned short val_izone) {
 
   }
 
-  if (val_software == SU2_COMPONENT::SU2_CFD) {
+
+    if (((val_software == SU2_COMPONENT::SU2_MDO) && ( ContinuousAdjoint || DiscreteAdjoint)) || (val_software == SU2_COMPONENT::SU2_DOT)) {
+
+    cout << endl <<"---------------- Design problem definition  ( Zone "  << iZone << " ) ------------------" << endl;
+    if (nObj==1) {
+      switch (Kind_ObjFunc[0]) {
+        case DRAG_COEFFICIENT:           cout << "CD objective function";
+          if (Fixed_CL_Mode) {           cout << " using fixed CL mode, dCD/dCL = " << dCD_dCL << "." << endl; }
+          else {                         cout << "." << endl; }
+          break;
+        case LIFT_COEFFICIENT:           cout << "CL objective function." << endl; break;
+        case MOMENT_X_COEFFICIENT:       cout << "CMx objective function" << endl;
+          if (Fixed_CL_Mode) {           cout << " using fixed CL mode, dCMx/dCL = " << dCMx_dCL << "." << endl; }
+          else {                         cout << "." << endl; }
+          break;
+        case MOMENT_Y_COEFFICIENT:       cout << "CMy objective function" << endl;
+          if (Fixed_CL_Mode) {           cout << " using fixed CL mode, dCMy/dCL = " << dCMy_dCL << "." << endl; }
+          else {                         cout << "." << endl; }
+          break;
+        case MOMENT_Z_COEFFICIENT:       cout << "CMz objective function" << endl;
+          if (Fixed_CL_Mode) {           cout << " using fixed CL mode, dCMz/dCL = " << dCMz_dCL << "." << endl; }
+          else {                         cout << "." << endl; }
+          break;
+        case INVERSE_DESIGN_PRESSURE:    cout << "Inverse design (Cp) objective function." << endl; break;
+        case INVERSE_DESIGN_HEATFLUX:    cout << "Inverse design (Heat Flux) objective function." << endl; break;
+        case SIDEFORCE_COEFFICIENT:      cout << "Side force objective function." << endl; break;
+        case EFFICIENCY:                 cout << "CL/CD objective function." << endl; break;
+        case EQUIVALENT_AREA:            cout << "Equivalent area objective function. CD weight: " << WeightCd <<"."<< endl;  break;
+        case NEARFIELD_PRESSURE:         cout << "Nearfield pressure objective function. CD weight: " << WeightCd <<"."<< endl;  break;
+        case FORCE_X_COEFFICIENT:        cout << "X-force objective function." << endl; break;
+        case FORCE_Y_COEFFICIENT:        cout << "Y-force objective function." << endl; break;
+        case FORCE_Z_COEFFICIENT:        cout << "Z-force objective function." << endl; break;
+        case THRUST_COEFFICIENT:         cout << "Thrust objective function." << endl; break;
+        case TORQUE_COEFFICIENT:         cout << "Torque efficiency objective function." << endl; break;
+        case TOTAL_HEATFLUX:             cout << "Total heat flux objective function." << endl; break;
+        case MAXIMUM_HEATFLUX:           cout << "Maximum heat flux objective function." << endl; break;
+        case FIGURE_OF_MERIT:            cout << "Rotor Figure of Merit objective function." << endl; break;
+        case BUFFET_SENSOR:              cout << "Buffet sensor objective function." << endl; break;
+        case SURFACE_TOTAL_PRESSURE:     cout << "Average total pressure objective function." << endl; break;
+        case SURFACE_STATIC_PRESSURE:    cout << "Average static pressure objective function." << endl; break;
+        case SURFACE_STATIC_TEMPERATURE: cout << "Average static temperature objective function." << endl; break;
+        case SURFACE_MASSFLOW:           cout << "Mass flow rate objective function." << endl; break;
+        case SURFACE_MACH:               cout << "Mach number objective function." << endl; break;
+        case CUSTOM_OBJFUNC:             cout << "Custom objective function." << endl; break;
+        case REFERENCE_GEOMETRY:         cout << "Target geometry objective function." << endl; break;
+        case REFERENCE_NODE:             cout << "Target node displacement objective function." << endl; break;
+        case VOLUME_FRACTION:            cout << "Volume fraction objective function." << endl; break;
+        case TOPOL_DISCRETENESS:         cout << "Topology discreteness objective function." << endl; break;
+        case TOPOL_COMPLIANCE:           cout << "Topology compliance objective function." << endl; break;
+        case STRESS_PENALTY:             cout << "Stress penalty objective function." << endl; break;
+      }
+    }
+    else {
+      cout << "Weighted sum objective function." << endl;
+    }
+
+  }
+
+  if ( (val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO) {
 
     auto PrintLimiterInfo = [&](const LIMITER kind_limiter) {
       cout << "Second order integration in space, with slope limiter.\n";
@@ -7169,7 +7326,7 @@ void CConfig::SetOutput(SU2_COMPONENT val_software, unsigned short val_izone) {
         cout << "Euler implicit time integration for the turbulence model." << endl;
   }
 
-  if (val_software == SU2_COMPONENT::SU2_CFD) {
+  if ((val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO)) {
 
     cout << endl <<"------------------ Convergence Criteria  ( Zone "  << iZone << " ) ---------------------" << endl;
 
@@ -7200,7 +7357,7 @@ void CConfig::SetOutput(SU2_COMPONENT val_software, unsigned short val_izone) {
 
   cout << endl <<"-------------------- Output Information ( Zone "  << iZone << " ) ----------------------" << endl;
 
-  if (val_software == SU2_COMPONENT::SU2_CFD) {
+  if ((val_software == SU2_COMPONENT::SU2_CFD) || (val_software == SU2_COMPONENT::SU2_MDO) {
 
     if (nVolumeOutputFiles != 0) {
       cout << "File writing frequency: " << endl;

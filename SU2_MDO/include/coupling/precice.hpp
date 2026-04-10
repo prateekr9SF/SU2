@@ -8,7 +8,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "SU2_CFD.hpp"
+#include "../SU2_MDO.hpp"
 
 #include "precice/SolverInterface.hpp"
 

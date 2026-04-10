@@ -36,7 +36,7 @@
  * \author R. Sanchez
  * \version 8.0.1 "Harrier"
  */
-class CSinglezoneDriver : public CDriver {
+class CStaticMDODriver : public CDriver {
 protected:
 
   unsigned long TimeIter;
@@ -55,14 +55,14 @@ public:
    * \param[in] val_nZone - Total number of zones.
    * \param[in] MPICommunicator - MPI communicator for SU2.
    */
-  CSinglezoneDriver(char* confFile,
+  CStaticMDODriver(char* confFile,
              unsigned short val_nZone,
              SU2_Comm MPICommunicator);
 
   /*!
    * \brief Destructor of the class.
    */
-  ~CSinglezoneDriver(void) override;
+  ~CStaticMDODriver(void) override;
 
   /*!
    * \brief [Overload] Launch the computation for single-zone problems.
@@ -77,7 +77,7 @@ public:
   /*!
    * \brief Run the iteration for ZONE_0.
    */
-  void Run() override;
+  void RunSMDO();
 
   /*!
    * \brief Postprocess the iteration for ZONE_0.

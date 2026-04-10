@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 
-#include "../include/precice.hpp"
+#include "../include/coupling/precice.hpp"
 
 
 /*---Main class description -----*/

@@ -27,7 +27,7 @@
 
 #include "../../Common/include/toolboxes/geometry_toolbox.hpp"
 #include "../include/drivers/CDriver.hpp"
-#include "../include/drivers/CSinglezoneDriver.hpp"
+#include "../include/drivers/CStaticMDODriver.hpp"
 
 void CDriver::PreprocessPythonInterface(CConfig** config, CGeometry**** geometry, CSolver***** solver) {
   int rank = MASTER_NODE;
@@ -111,7 +111,7 @@ void CDriver::SetFarFieldAoS(const passivedouble AoS) {
 /* Functions related to simulation control, high level functions (reset convergence, set initial mesh, etc.)   */
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void CSinglezoneDriver::SetInitialMesh() {
+void CStaticMDODriver::SetInitialMesh() {
   DynamicMeshUpdate(0);
 
   SU2_OMP_PARALLEL {

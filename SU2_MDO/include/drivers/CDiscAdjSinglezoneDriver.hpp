@@ -27,7 +27,7 @@
  */
 
 #pragma once
-#include "CSinglezoneDriver.hpp"
+#include "CStaticMDODriver.hpp"
 
 /*!
  * \class CDiscAdjSinglezoneDriver
@@ -36,7 +36,7 @@
  * \author R. Sanchez
  * \version 8.0.1 "Harrier"
  */
-class CDiscAdjSinglezoneDriver : public CSinglezoneDriver {
+class CDiscAdjSinglezoneDriver : public CStaticMDODriver {
 protected:
 
   unsigned long nAdjoint_Iter;                  /*!< \brief The number of adjoint iterations that are run on the fixed-point solver.*/

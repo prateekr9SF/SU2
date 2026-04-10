@@ -36,7 +36,7 @@
 #include "CDriverBase.hpp"
 
 using namespace std;
-
+class Precice;
 class CInterpolator;
 class CIteration;
 class COutput;
@@ -78,6 +78,10 @@ class CDriver : public CDriverBase {
                                  the interface. */
   CInterface*** interface_container; /*!< \brief Definition of the interface of information and physics. */
   bool dry_run;                      /*!< \brief Flag if SU2_CFD was started as dry-run via "SU2_CFD -d <config>.cfg" */
+
+  bool enable_Steady_MDO;
+  Precice *preice;
+  su2double *max_precide_dt, *dt;
 
  public:
   /*!

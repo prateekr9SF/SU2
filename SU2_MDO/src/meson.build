@@ -161,7 +161,7 @@ su2_mdo_src += files(['interfaces/CInterface.cpp',
 
 su2_mdo_src += files(['drivers/CDriver.cpp',
                       'drivers/CMultizoneDriver.cpp',
-                      'drivers/CSinglezoneDriver.cpp',
+                      'drivers/CStaticMDODriver.cpp',
                       'drivers/CDiscAdjMultizoneDriver.cpp',
                       'drivers/CDiscAdjSinglezoneDriver.cpp',
                       'drivers/CDummyDriver.cpp',

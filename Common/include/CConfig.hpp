@@ -1249,9 +1249,7 @@ private:
    */
   void SetDefaultFromConfig(CConfig *config);
 
-  /*!
-   * \brief Set default values for all options not yet set.
-   */
+
   void SetDefault();
 
   /*--- all_options is a map containing all of the options. This is used during config file parsing
@@ -1264,6 +1262,22 @@ private:
    class of COptionBase that turns the string into a value) ---*/
 
   map<string, COptionBase*> option_map;
+
+
+  bool precice_usage;	/*!< \brief Usage of preCICE for FSI simulations */
+  bool precice_verbosityLevel_high;	/*!< \brief Verbosity level of the preCICE adapter for FSI simulations */
+  bool precice_loadRamping; /*!< \brief Usage of preCICE load ramping procedure for FSI simulations */
+  unsigned long precice_loadRampingDuration; /*!< \brief Number of physical time steps for which the load ramping procedure is applied */
+  unsigned long precice_numberWetSurfaces; /*!< \brief Number of different wet surfaces */
+  string preciceConfigFileName;	/*!< \brief Name of the preCICE configuration file */
+  string preciceWetSurfaceMarkerName;	/*!< \brief Name of the wet surface marker (from the mesh file) that the preCICE adapter will use for identification of the wet surface */
+
+  bool Steady_MDO;
+
+  bool enable_CL_driver = false;
+
+
+
 
 
   // All of the addXxxOptions take in the name of the option, and a reference to the field of that option
@@ -9242,6 +9256,51 @@ public:
    * \brief Get if AD preaccumulation should be performed.
    */
   bool GetAD_Preaccumulation(void) const { return AD_Preaccumulation;}
+
+
+  bool GetpreCICE_Usage(void);
+
+  /*!
+  * \brief Check if the MDO needs to be performed
+  * \return True if we use preCICE, false otherwise.
+  */
+
+  /*!
+   * \brief Check if the verbosity level of the preCICE adapter is high or not
+   * \return True if verbosity level is high, false otherwise.
+   */
+  bool GetpreCICE_VerbosityLevel_High(void);
+
+  /*!
+   * \brief Check if the load ramping procedure of the preCICE adapter is activated or not
+   * \return True if the procedure is applied, false otherwise.
+  */
+  bool GetpreCICE_LoadRamping(void);
+
+    /*!
+   * \brief Get the name of the preCICE configuration file
+   * \return preCICE configuration file name as string
+   */
+  string GetpreCICE_ConfigFileName(void);
+
+  /*!
+   * \brief Get the name of the wet surface marker used in the mesh file
+   * \return Wet surface marker name as string
+   */
+  string GetpreCICE_WetSurfaceMarkerName(void) const {return preciceWetSurfaceMarkerName;}
+
+
+    /*!
+   * \brief Get the number of physical time steps for which the load ramping is applied
+   * \return Number of corresponding time steps for which the force vector is continuously increased up to the original value
+   */
+  unsigned long GetpreCICE_LoadRampingDuration(void);
+
+  /*!
+   * \brief Get the number of wet surfaces in the FSI simulation
+   * \return Number of wet surfaces
+   */
+  unsigned long GetpreCICE_NumberWetSurfaces(void);
 
   /*!
    * \brief Get the heat equation.
