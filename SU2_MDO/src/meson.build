@@ -187,6 +187,8 @@ su2_mdo_src += files(['iteration/CIteration.cpp',
                       'iteration/CHeatIteration.cpp',
                       'iteration/CTurboIteration.cpp'])
 
+su2_mdo_src += files(['coupling/precice.cpp'])
+
 su2_mdo_src += files(['limiters/CLimiterDetails.cpp'])
 
 if get_option('enable-normal')
