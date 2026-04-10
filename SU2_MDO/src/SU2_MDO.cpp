@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
   const bool multizone = config.GetMultizone_Problem();
   const bool harmonic_balance = (config.GetTime_Marching() == TIME_MARCHING::HARMONIC_BALANCE);
 
-  const bool MDO_steady = config.GetSMDO_Mode()
+  const bool MDO_steady = config.GetSMDO_Mode();
 
   if (MDO_steady)
   {

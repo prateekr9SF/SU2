@@ -80,9 +80,11 @@ void CStaticMDODriver::StartSolver()
     TimeIter = config_container[ZONE_0]->GetRestart_Iter();
 
   /*--- Run the problem until the number of time iterations required is reached. ---*/
-  while ( TimeIter < config_container[ZONE_0]->GetnTime_Iter() ) {
+  while ( TimeIter < config_container[ZONE_0]->GetnTime_Iter() && enable_Steady_MDO && precice ->isCouplingOngoing() ) {
 
     /*--- Perform some preprocessing before starting the time-step simulation. ---*/
+
+    precice->saveOldStaticState(&StopCalc, dt);
 
     Preprocess(TimeIter);
 
@@ -102,20 +104,67 @@ void CStaticMDODriver::StartSolver()
 
     Monitor(TimeIter);
 
-    /*--- Output the solution in files. ---*/
+    /*---Output the required fields to files---*/
+    if (!(precice->isCouplingOngoing()))
+    {
+      if(rank==MASTER_NODE)
+      {
+        std::cout<<"Aero-elastic solution converged!"<<std::endl;
+        std::cout<<"Writing fluid field at aero-elastic equillibrium"<<std::endl;
+      }
 
-    Output(TimeIter);
+
+      /*--- Output the solution in files. ---*/
+
+      Output(TimeIter);
+
+      /*---Output the deformed mesh---*/
+
+      if (rank == MASTER_NODE)
+      {
+        std::cout << "Writing fluid mesh at aeroelastic equillibrium" << std::endl;
+      }
+
+      output_container[ZONE_0]->LoadData(geometry_container[ZONE_0][INST_0][MESH_0], config_container[ZONE_0], solver_container[ZONE_0][INST_0][MESH_0]);
+      output_container[ZONE_0]->WriteToFile(config_container[ZONE_0],geometry_container[ZONE_0][INST_0][MESH_0], OUTPUT_TYPE::MESH, config_container[ZONE_0]->GetMesh_Out_FileName());
+
+      break;
+
+    }
+
+    ///*--- If the convergence criteria has been met, terminate the simulation. ---*/
+
+   // if (StopCalc) break;
+
+   // TimeIter++;
+
+    if (precice->isCouplingOngoing())
+    {
+      /*---Compute surface tractions and recieve displaced surface---*/
+      *max_precice_dt = precice->advance(*dt);
+
+      /*---Disable the CL_Driver for remaining implicit iterations---*/
+      //config_container[ZONE_0]->Set_CL_Driver_Mode(false);
+               
+      /*---Stay at the current time---*/
+      TimeIter--;      
+
+      /*---Reload the fluid state---*/
+      precice->reloadOldStaticState(&StopCalc, dt);
+
+    }
 
     /*--- If the convergence criteria has been met, terminate the simulation. ---*/
-
-    if (StopCalc) break;
-
     TimeIter++;
 
   }
 
-  delete precice;
-
+  if (precice !=NULL)
+  {
+    delete precice;
+    delete dt;
+    delete max_precice_dt;
+  }
 }
 
 void CStaticMDODriver::Preprocess(unsigned long TimeIter) {
@@ -169,7 +218,7 @@ void CStaticMDODriver::Preprocess(unsigned long TimeIter) {
 
 }
 
-void CStaticMDODriver::Run() {
+void CStaticMDODriver::RunSMDO() {
 
   unsigned long OuterIter = 0;
   config_container[ZONE_0]->SetOuterIter(OuterIter);

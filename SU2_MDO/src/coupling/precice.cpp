@@ -738,16 +738,17 @@ void Precice::reloadOldState(bool *StopCalc, double *dt)
     geometry_container[ZONE_0][INST_0][MESH_0]->nodes->SetCoord_p1(iPoint, Coord_p1_Saved[iPoint]);
     geometry_container[ZONE_0][INST_0][MESH_0]->nodes->SetCoord(iPoint, Coord_Saved[iPoint]);
 
-    //Reload grid velocity
-    geometry_container[ZONE_0][INST_0][MESH_0]->nodes->SetGridVel(iPoint, GridVel_Saved[iPoint]);
+    //Reload grid velocity *May be this is not required for steady state MDO <- come back for this
+    //geometry_container[ZONE_0][INST_0][MESH_0]->nodes->SetGridVel(iPoint, GridVel_Saved[iPoint]);
     
     
   }
 
   
   //--- Set the grid velocity gradient here---//
-  
-   geometry_container[ZONE_0][INST_0][MESH_0]->nodes->SetGridVel_Grad(GridVel_Grad);
+   
+  // May be this is not required for steady-state MDO
+   //geometry_container[ZONE_0][INST_0][MESH_0]->nodes->SetGridVel_Grad(GridVel_Grad); <- come back for this
    
   //Reload wether simulation should be stopped after current iteration
   *StopCalc = StopCalc_savedState;
