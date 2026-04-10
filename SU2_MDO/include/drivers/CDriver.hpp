@@ -80,8 +80,8 @@ class CDriver : public CDriverBase {
   bool dry_run;                      /*!< \brief Flag if SU2_CFD was started as dry-run via "SU2_CFD -d <config>.cfg" */
 
   bool enable_Steady_MDO;
-  Precice *preice;
-  su2double *max_precide_dt, *dt;
+  Precice *precice;
+  su2double *max_precice_dt, *dt;
 
  public:
   /*!

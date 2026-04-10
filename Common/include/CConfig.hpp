@@ -9785,6 +9785,9 @@ public:
    */
   unsigned short GetRom_SaveFreq(void) const { return rom_save_freq; }
 
+  /*---Getter function for steady MDO in Const env---*/
+  bool GetSMDO_Mode(void) const {return Steady_MDO;}
+
   /*!
    * \brief Check if the gradient smoothing is active
    * \return true means that smoothing is applied to the sensitivities

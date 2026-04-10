@@ -45,7 +45,7 @@ CStaticMDODriver::CStaticMDODriver(char* confFile,
 
 CStaticMDODriver::~CStaticMDODriver() = default;
 
-void CSinglezoneDriver::StartSolver() 
+void CStaticMDODriver::StartSolver() 
 {
 
   StartTime = SU2_MPI::Wtime();
@@ -70,7 +70,7 @@ void CSinglezoneDriver::StartSolver()
     cout << "--------------------------------------------- Initialize Coupling Interface -----------------------------------" << endl;
   }
 
-  precice = new Precice(config_container[ZONE_0] ->GetpreCICE>ConfigFileName(), rank, size, config_container, geometry_container, solver_container, grid_movement);
+  precice = new Precice(config_container[ZONE_0] ->GetpreCICE_ConfigFileName(), rank, size, config_container, geometry_container, solver_container, grid_movement);
   dt = new double(1);
 
   max_precice_dt = new double(precice->initialize());
