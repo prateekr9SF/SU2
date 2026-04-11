@@ -1,5 +1,5 @@
 /*!
- * \file SU2_CFD.cpp
+ * \file SU2_MDO.cpp
  * \brief Main file of the SU2 Computational Fluid Dynamics code
  * \author F. Palacios, T. Economon, P. Ranjan
  * \version 8.0.1 "Harrier"
@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
    file the number of zones and dimensions from the numerical grid (required
    for variables allocation). ---*/
 
-  const CConfig config(config_file_name, SU2_COMPONENT::SU2_CFD);
+  const CConfig config(config_file_name, SU2_COMPONENT::SU2_MDO);
   const unsigned short nZone = config.GetnZone();
 
   /*--- First, given the basic information about the number of zones and the
@@ -112,38 +112,47 @@ int main(int argc, char *argv[]) {
     driver = new CStaticMDODriver(config_file_name, nZone, MPICommunicator);
   }
 
-  if (dry_run) {
+  if (dry_run) 
+  {
 
     /*--- Dry Run. ---*/
     driver = new CDummyDriver(config_file_name, nZone, MPICommunicator);
 
   }
-  else if (!multizone && !harmonic_balance) {
+
+  else if (!multizone && !harmonic_balance) 
+  {
 
     /*--- Generic single zone problem: instantiate the single zone driver class. ---*/
     if (nZone != 1)
       SU2_MPI::Error("The required solver doesn't support multizone simulations", CURRENT_FUNCTION);
 
-    if (disc_adj) {
-      driver = new CDiscAdjSinglezoneDriver(config_file_name, nZone, MPICommunicator);
+    if (disc_adj) 
+    {
+     // driver = new CDiscAdjSinglezoneDriver(config_file_name, nZone, MPICommunicator);
     }
-    else {
-      driver = new CStaticMDODriver(config_file_name, nZone, MPICommunicator);
+    else 
+    {
+      //driver = new CStaticMDODriver(config_file_name, nZone, MPICommunicator);
     }
 
   }
-  else if (multizone) {
+  else if (multizone) 
+  {
 
     /*--- Generic multizone problems. ---*/
-    if (disc_adj) {
-      driver = new CDiscAdjMultizoneDriver(config_file_name, nZone, MPICommunicator);
+    if (disc_adj) 
+    {
+     // driver = new CDiscAdjMultizoneDriver(config_file_name, nZone, MPICommunicator);
     }
-    else {
-      driver = new CMultizoneDriver(config_file_name, nZone, MPICommunicator);
+    else 
+    {
+     // driver = new CMultizoneDriver(config_file_name, nZone, MPICommunicator);
     }
 
   }
-  else {
+  else 
+  {
     assert(harmonic_balance);
 
     /*--- Harmonic balance problem: instantiate the Harmonic Balance driver class. ---*/

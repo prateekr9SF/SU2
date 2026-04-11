@@ -297,7 +297,7 @@ CDriverBase(confFile, val_nZone, MPICommunicator), StopCalc(false), fsi(false), 
 void CDriver::InitializeContainers(){
 
   /*--- Create pointers to all of the classes that may be used throughout
-   the SU2_CFD code. In general, the pointers are instantiated down a
+   the SU2_MDO code. In general, the pointers are instantiated down a
    hierarchy over all zones, multigrid levels, equation sets, and equation
    terms as described in the comments below. ---*/
 
@@ -540,7 +540,7 @@ void CDriver::Finalize() {
   /*--- Exit the solver cleanly ---*/
 
   if (rank == MASTER_NODE)
-    cout << endl <<"------------------------- Exit Success (SU2_CFD) ------------------------" << endl << endl;
+    cout << endl <<"------------------------- Exit Success (SU2_MDO) ------------------------" << endl << endl;
 
 }
 
@@ -551,7 +551,7 @@ void CDriver::PreprocessInput(CConfig **&config, CConfig *&driver_config) {
 
   /*--- Initialize the configuration of the driver ---*/
 
-  driver_config = new CConfig(config_file_name, SU2_COMPONENT::SU2_CFD, false);
+  driver_config = new CConfig(config_file_name, SU2_COMPONENT::SU2_MDO, false);
 
   for (iZone = 0; iZone < nZone; iZone++) {
 
@@ -565,10 +565,10 @@ void CDriver::PreprocessInput(CConfig **&config, CConfig *&driver_config) {
     if (driver_config->GetnConfigFiles() > 0){
 
       strcpy(zone_file_name, driver_config->GetConfigFilename(iZone).c_str());
-      config[iZone] = new CConfig(driver_config, zone_file_name, SU2_COMPONENT::SU2_CFD, iZone, nZone, true);
+      config[iZone] = new CConfig(driver_config, zone_file_name, SU2_COMPONENT::SU2_MDO, iZone, nZone, true);
     }
     else{
-      config[iZone] = new CConfig(driver_config, config_file_name, SU2_COMPONENT::SU2_CFD, iZone, nZone, true);
+      config[iZone] = new CConfig(driver_config, config_file_name, SU2_COMPONENT::SU2_MDO, iZone, nZone, true);
     }
 
     /*--- Set the MPI communicator ---*/

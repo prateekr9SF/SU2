@@ -49,6 +49,8 @@ protected:
 
 public:
 
+    double target_time = 50.0;
+
   /*!
    * \brief Constructor of the class.
    * \param[in] confFile - Configuration file name.
@@ -77,7 +79,7 @@ public:
   /*!
    * \brief Run the iteration for ZONE_0.
    */
-  void RunSMDO();
+  void RunSMDO(int counter);
 
   /*!
    * \brief Postprocess the iteration for ZONE_0.
@@ -109,5 +111,9 @@ public:
    * \param ExtIter
    */
   bool Monitor(unsigned long TimeIter) override;
+
+   void RunMDO(unsigned long TimeIter); 
+
+
 
 };

@@ -106,6 +106,11 @@ void CVolumetricMovement::UpdateMultiGrid(CGeometry** geometry, CConfig* config)
 
 void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* config, bool UpdateGeo, bool Derivative,
                                                 bool ForwardProjectionDerivative) {
+  
+  if (rank == MASTER_NODE)
+  {
+    cout <<"Deforming volume grid due to aero-elastic response" << endl;
+  }
   unsigned long Tot_Iter = 0;
   su2double MinVolume, MaxVolume;
 
@@ -116,7 +121,7 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
 
   /*--- Disable the screen output if we're running SU2_CFD ---*/
 
-  if (config->GetKind_SU2() == SU2_COMPONENT::SU2_CFD && !Derivative) Screen_Output = false;
+  if (config->GetKind_SU2() == SU2_COMPONENT::SU2_MDO && !Derivative) Screen_Output = false;
   if (config->GetSmoothGradient()) Screen_Output = true;
 
   /*--- Set the number of nonlinear iterations to 1 if Derivative computation is enabled ---*/
@@ -130,6 +135,11 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
   for (auto iNonlinear_Iter = 0ul; iNonlinear_Iter < Nonlinear_Iter; iNonlinear_Iter++) {
     /*--- Initialize vector and sparse matrix ---*/
 
+                  if (rank == MASTER_NODE)
+    {
+      std::cout <<"Initialize vector and sparse matrix... "<<std::endl;
+    }
+
     LinSysSol.SetValZero();
     LinSysRes.SetValZero();
     StiffMatrix.SetValZero();
@@ -138,11 +148,25 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
      mesh. FEA uses a finite element method discretization of the linear
      elasticity equations (transfers element stiffnesses to point-to-point). ---*/
 
-    MinVolume = SetFEAMethodContributions_Elem(geometry, config);
+                  if (rank == MASTER_NODE)
+    {
+      std::cout <<"Construct stiffness matrix... "<<std::endl;
+    } 
 
+    MinVolume = SetFEAMethodContributions_Elem(geometry, config);
+                  if (rank == MASTER_NODE)
+    {
+      std::cout <<"Done constructing stiffness matrix... "<<std::endl;
+    } 
     /*--- Set the boundary and volume displacements (as prescribed by the
      design variable perturbations controlling the surface shape)
      as a Dirichlet BC. ---*/
+
+              if (rank == MASTER_NODE)
+    {
+      std::cout <<"Setting boundary displacements... "<<std::endl;
+    }
+
 
     SetBoundaryDisplacements(geometry, config);
 
@@ -160,6 +184,11 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
      so that all nodes have the same solution and r.h.s. entries
      across all partitions. ---*/
 
+         if (rank == MASTER_NODE)
+    {
+      std::cout << "Communicating prescribed B.C to all nodes... "<<std::endl;
+    }
+
     CSysMatrixComms::Initiate(LinSysSol, geometry, config);
     CSysMatrixComms::Complete(LinSysSol, geometry, config);
 
@@ -174,7 +203,7 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
     /*--- If we want no derivatives or the direct derivatives, we solve the system using the
      * normal matrix vector product and preconditioner. For the mesh sensitivities using
      * the discrete adjoint method we solve the system using the transposed matrix. ---*/
-    if (!Derivative || ((config->GetKind_SU2() == SU2_COMPONENT::SU2_CFD) && Derivative) ||
+    if (!Derivative || ((config->GetKind_SU2() == SU2_COMPONENT::SU2_MDO) && Derivative) ||
         (config->GetSmoothGradient() && ForwardProjectionDerivative)) {
       Tot_Iter = System.Solve(StiffMatrix, LinSysRes, LinSysSol, geometry, config);
 
@@ -475,6 +504,11 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
   /*--- Compute the distance to the nearest surface if needed
    as part of the stiffness calculation.. ---*/
 
+   if (rank == MASTER_NODE)
+   {
+    cout <<"COMPUTING WALL DISTANCE" <<endl;
+   }
+
   if ((config->GetDeform_Stiffness_Type() == SOLID_WALL_DISTANCE) || (config->GetDeform_Limit() < 1E6)) {
     ComputeSolid_Wall_Distance(geometry, config, MinDistance, MaxDistance);
     if (rank == MASTER_NODE && Screen_Output)
@@ -482,6 +516,11 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
   }
 
   /*--- Compute contributions from each element by forming the stiffness matrix (FEA) ---*/
+
+  if (rank == MASTER_NODE)
+  {
+    cout << "Compute element-wise contributions.." <<endl;
+  }
 
   for (iElem = 0; iElem < geometry->GetnElem(); iElem++) {
     if (geometry->elem[iElem]->GetVTK_Type() == TRIANGLE) nNodes = 3;
@@ -491,12 +530,22 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
     if (geometry->elem[iElem]->GetVTK_Type() == PRISM) nNodes = 6;
     if (geometry->elem[iElem]->GetVTK_Type() == HEXAHEDRON) nNodes = 8;
 
+      if (rank == MASTER_NODE)
+  {
+    cout << "Done setting node definition based on element type.." <<endl;
+  }
+
     for (iNodes = 0; iNodes < nNodes; iNodes++) {
       PointCorners[iNodes] = geometry->elem[iElem]->GetNode(iNodes);
       for (iDim = 0; iDim < nDim; iDim++) {
         CoordCorners[iNodes][iDim] = geometry->nodes->GetCoord(PointCorners[iNodes], iDim);
       }
     }
+
+      if (rank == MASTER_NODE)
+  {
+    cout << "Computed coord corners" <<endl;
+  }
 
     /*--- Extract Element volume and distance to compute the stiffness ---*/
 
@@ -509,6 +558,11 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
       ElemDistance = ElemDistance / (su2double)nNodes;
     }
 
+    if (rank == MASTER_NODE)
+    {
+      cout << "Begin setting StiffMatrix for 3D" <<endl;
+    }
+
     if (nDim == 2)
       SetFEA_StiffMatrix2D(geometry, config, StiffMatrix_Elem, PointCorners, CoordCorners, nNodes, ElemVolume,
                            ElemDistance);
@@ -516,13 +570,34 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
       SetFEA_StiffMatrix3D(geometry, config, StiffMatrix_Elem, PointCorners, CoordCorners, nNodes, ElemVolume,
                            ElemDistance);
 
+    if (rank == MASTER_NODE)
+    {
+      cout << "Done with stiffness matrix for 3D" <<endl;
+    }
+
     AddFEA_StiffMatrix(geometry, StiffMatrix_Elem, PointCorners, nNodes);
+
+    if (rank == MASTER_NODE)
+    {
+      cout << "ADDFEA_Stiff matrix done" <<endl;
+    }
   }
 
   /*--- Deallocate memory and exit ---*/
 
-  for (iVar = 0; iVar < StiffMatrix_nElem; iVar++) delete[] StiffMatrix_Elem[iVar];
+      if (rank == MASTER_NODE)
+    {
+      cout << "Clear FEA variables" <<endl;
+    }
+
+  for (iVar = 0; iVar < StiffMatrix_nElem; iVar++) 
+    delete[] StiffMatrix_Elem[iVar];
   delete[] StiffMatrix_Elem;
+
+  if (rank == MASTER_NODE)
+  {
+    cout <<"Done with clearing memeory" <<endl;
+  }
 
   return MinVolume;
 }
@@ -1614,6 +1689,11 @@ void CVolumetricMovement::AddFEA_StiffMatrix(CGeometry* geometry, su2double** St
 
   unsigned short nVar = geometry->GetnDim();
 
+      if (rank == MASTER_NODE)
+    {
+      cout << "In ADD FEA StiffMatrix" <<endl;
+    }
+
   su2double** StiffMatrix_Node;
   StiffMatrix_Node = new su2double*[nVar];
   for (iVar = 0; iVar < nVar; iVar++) StiffMatrix_Node[iVar] = new su2double[nVar];
@@ -1624,17 +1704,45 @@ void CVolumetricMovement::AddFEA_StiffMatrix(CGeometry* geometry, su2double** St
   /*--- Transform the stiffness matrix for the hexahedral element into the
    contributions for the individual nodes relative to each other. ---*/
 
-  for (iVar = 0; iVar < nNodes; iVar++) {
-    for (jVar = 0; jVar < nNodes; jVar++) {
-      for (iDim = 0; iDim < nVar; iDim++) {
-        for (jDim = 0; jDim < nVar; jDim++) {
+         if (rank == MASTER_NODE)
+    {
+      cout << "Begin matrix transformation" <<endl;
+    }
+
+  for (iVar = 0; iVar < nNodes; iVar++) 
+  {
+    for (jVar = 0; jVar < nNodes; jVar++) 
+    {
+      for (iDim = 0; iDim < nVar; iDim++) 
+      {
+        for (jDim = 0; jDim < nVar; jDim++) 
+        {
           StiffMatrix_Node[iDim][jDim] = StiffMatrix_Elem[(iVar * nVar) + iDim][(jVar * nVar) + jDim];
         }
       }
 
+std::cout << "rank = " << rank
+          << ", row = " << PointCorners[iVar]
+          << ", col = " << PointCorners[jVar]
+          << ", nPointDomain = " << geometry->GetnPointDomain()
+          << ", nPoint = " << geometry->GetnPoint()
+          << std::endl;
+
       StiffMatrix.AddBlock(PointCorners[iVar], PointCorners[jVar], StiffMatrix_Node);
+
+                        if (rank == MASTER_NODE)
+    {
+      cout << "Done with matrix transformation" <<endl;
+    }
+
+
     }
   }
+
+      if (rank == MASTER_NODE)
+    {
+      cout << "Done with ADD FEA StiffMatrix" <<endl;
+    }
 
   /*--- Deallocate memory and exit ---*/
 
@@ -1689,9 +1797,9 @@ void CVolumetricMovement::SetBoundaryDisplacements(CGeometry* geometry, CConfig*
 
   for (iMarker = 0; iMarker < config->GetnMarker_All(); iMarker++) 
   {
-    if (((config->GetMarker_All_Moving(iMarker) == YES) && (Kind_SU2 == SU2_COMPONENT::SU2_CFD)) ||
+    if (((config->GetMarker_All_Moving(iMarker) == YES) && (Kind_SU2 == SU2_COMPONENT::SU2_MDO)) ||
         ((config->GetMarker_All_DV(iMarker) == YES) && (Kind_SU2 == SU2_COMPONENT::SU2_DEF)) ||
-        ((config->GetDirectDiff() == D_DESIGN) && (Kind_SU2 == SU2_COMPONENT::SU2_CFD) &&
+        ((config->GetDirectDiff() == D_DESIGN) && (Kind_SU2 == SU2_COMPONENT::SU2_MDO) &&
          (config->GetMarker_All_DV(iMarker) == YES)) ||
         ((config->GetMarker_All_DV(iMarker) == YES) && (Kind_SU2 == SU2_COMPONENT::SU2_DOT))) 
         {
@@ -1824,7 +1932,7 @@ void CVolumetricMovement::SetBoundaryDisplacements(CGeometry* geometry, CConfig*
   /*--- Move the FSI interfaces ---*/
 
   for (iMarker = 0; iMarker < config->GetnMarker_All(); iMarker++) {
-    if ((config->GetMarker_All_ZoneInterface(iMarker) == YES) && (Kind_SU2 == SU2_COMPONENT::SU2_CFD)) {
+    if ((config->GetMarker_All_ZoneInterface(iMarker) == YES) && (Kind_SU2 == SU2_COMPONENT::SU2_MDO)) {
       for (iVertex = 0; iVertex < geometry->nVertex[iMarker]; iVertex++) {
         iPoint = geometry->vertex[iMarker][iVertex]->GetNode();
         VarCoord = geometry->vertex[iMarker][iVertex]->GetVarCoord();
@@ -1846,7 +1954,7 @@ void CVolumetricMovement::SetBoundaryDerivatives(CGeometry* geometry, CConfig* c
 
   su2double* VarCoord;
   SU2_COMPONENT Kind_SU2 = config->GetKind_SU2();
-  if ((config->GetDirectDiff() == D_DESIGN) && (Kind_SU2 == SU2_COMPONENT::SU2_CFD)) {
+  if ((config->GetDirectDiff() == D_DESIGN) && (Kind_SU2 == SU2_COMPONENT::SU2_MDO)) {
     for (iMarker = 0; iMarker < config->GetnMarker_All(); iMarker++) {
       if ((config->GetMarker_All_DV(iMarker) == YES)) {
         for (iVertex = 0; iVertex < geometry->nVertex[iMarker]; iVertex++) {
@@ -1896,7 +2004,7 @@ void CVolumetricMovement::UpdateGridCoord_Derivatives(CGeometry* geometry, CConf
 
   /*--- Update derivatives of the grid coordinates using the solution of the linear system
      after grid deformation (LinSysSol contains the derivatives of the x, y, z displacements). ---*/
-  if ((config->GetDirectDiff() == D_DESIGN) && (Kind_SU2 == SU2_COMPONENT::SU2_CFD)) {
+  if ((config->GetDirectDiff() == D_DESIGN) && (Kind_SU2 == SU2_COMPONENT::SU2_MDO)) {
     for (iPoint = 0; iPoint < geometry->GetnPoint(); iPoint++) {
       new_coord[0] = 0.0;
       new_coord[1] = 0.0;

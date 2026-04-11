@@ -4174,11 +4174,12 @@ void CConfig::SetPostprocessing(SU2_COMPONENT val_software, unsigned short val_i
 
       if((Kind_GridMovement != ROTATING_FRAME) &&
          (Kind_GridMovement != STEADY_TRANSLATION) &&
-         (Kind_GridMovement != NONE)){
+         (Kind_GridMovement != NONE)&&
+         (Kind_GridMovement != PRECICE_MOVEMENT)){
         SU2_MPI::Error("Unsupported kind of grid movement for steady state problems.", CURRENT_FUNCTION);
       }
       for (iMarker = 0; iMarker < nMarker_Moving; iMarker++){
-        if (Kind_SurfaceMovement[iMarker] != MOVING_WALL){
+        if (Kind_SurfaceMovement[iMarker] != MDO_SURFACE){
           SU2_MPI::Error("Unsupported kind of surface movement for steady state problems.", CURRENT_FUNCTION);
         }
       }

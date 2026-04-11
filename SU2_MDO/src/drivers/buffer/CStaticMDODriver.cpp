@@ -2,14 +2,14 @@
  * \file driver_direct_singlezone.cpp
  * \brief The main subroutines for driving single-zone problems.
  * \author R. Sanchez
- * \version 7.2.0 "Blackbird"
+ * \version 8.0.1 "Harrier"
  *
  * SU2 Project Website: https://su2code.github.io
  *
  * The SU2 Project is maintained by the SU2 Foundation
  * (http://su2foundation.org)
  *
- * Copyright 2012-2021, SU2 Contributors (cf. AUTHORS.md)
+ * Copyright 2012-2024, SU2 Contributors (cf. AUTHORS.md)
  *
  * SU2 is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -32,52 +32,46 @@
 
 #include "../../include/coupling/precice.hpp"
 
-
-
 CStaticMDODriver::CStaticMDODriver(char* confFile,
                        unsigned short val_nZone,
                        SU2_Comm MPICommunicator) : CDriver(confFile,
                                                           val_nZone,
                                                           MPICommunicator,
-                                                          false)
-                                                          {
+                                                          false) {
 
   /*--- Initialize the counter for TimeIter ---*/
   TimeIter = 0;
 }
 
-CStaticMDODriver::~CStaticMDODriver(void) {
+CStaticMDODriver::~CStaticMDODriver() = default;
 
-}
-
-void CStaticMDODriver::StartSolver()
+void CStaticMDODriver::StartSolver() 
 {
 
   StartTime = SU2_MPI::Wtime();
 
   config_container[ZONE_0]->Set_StartTime(StartTime);
 
-  /*---See if Steady MDA/MDO object needs to be created ---*/
-  bool enable_Steady_MDO = config_container[ZONE_0]->GetSMDO_Mode();
+  /*--- Main external loop of the solver. Runs for the number of time steps required. ---*/
 
-
+  if (rank == MASTER_NODE)
+    cout << endl <<"------------------------------ Begin Solver -----------------------------" << endl;
 
   if (rank == MASTER_NODE)
   {
-    cout << endl <<"------------------------------ Begin Forward Analysis -----------------------------" << endl;
+    cout << endl <<"Simulation Run using the Static Aeroelasticity Driver" << endl;
+    if (driver_config->GetTime_Domain())
+      cout << "The simulation will run for "
+           << driver_config->GetnTime_Iter() - config_container[ZONE_0]->GetRestart_Iter() << " time steps." << endl;
   }
 
-
-
+    /*---See if Steady MDA/MDO object needs to be created ---*/
+    bool enable_Steady_MDO = config_container[ZONE_0]->GetSMDO_Mode();
 
   if (rank == MASTER_NODE)
   {
-    cout << endl <<"Simulation Run using the STATIC aero-elasticity Driver" << endl;
-    if (driver_config->GetTime_Domain())
-    {
-        cout << "The simulation will run for "
-            << driver_config->GetnTime_Iter() - config_container[ZONE_0]->GetRestart_Iter() << " time steps." << endl;
-    }
+    cout << "--------------------------------------------- Initialize Coupling Interface -----------------------------------" << endl;
+    cout << "File name " << config_container[ZONE_0] ->GetpreCICE_ConfigFileName() << endl;
   }
 
   if (enable_Steady_MDO)
@@ -90,57 +84,67 @@ void CStaticMDODriver::StartSolver()
       std::cout << "------------------------------ Initialize Coupling Interface --------------------------------" << std::endl;
     }
 
+  
 
-    max_precice_dt = new double(precice->initialize());
+  max_precice_dt = new double(precice->initialize());
 
-    if (rank == MASTER_NODE)
-    {
-      std::cout << "------------------------------- Interface Initialization Complete ---------------------------------" << std::endl;
-    }
-  }
-
-  /*---Get the time at which aero-elastic state must be computed---*/
+    /*---Get the time at which aero-elastic state must be computed---*/
    target_time = config_container[ZONE_0]->GetTargTimeIter();
-
-  /*---Initialize counter to toggle enble/disable CL_Driver---*/
-  int counter = 0;
-
-  /*--- Main external loop of the solver. Runs for the number of time steps required. ---*/
-
 
   /*--- Set the initial time iteration to the restart iteration. ---*/
   if (config_container[ZONE_0]->GetRestart() && driver_config->GetTime_Domain())
     TimeIter = config_container[ZONE_0]->GetRestart_Iter();
 
-   while ((TimeIter < config_container[ZONE_0]->GetnTime_Iter()) &&!enable_Steady_MDO || (TimeIter < config_container[ZONE_0]->GetnTime_Iter()) && enable_Steady_MDO && precice->isCouplingOngoing() ||(TimeIter < config_container[ZONE_0]->GetnTime_Iter()) && enable_Steady_MDO)
-  /*--- Run the problem until the number of time iterations required is reached. ---*/
-  {
+    if (rank ==MASTER_NODE)
+    {
+      cout << "Entering MAIN SOLVER LOOP " <<endl;
+    }
 
+  /*--- Run the problem until the number of time iterations required is reached. ---*/
+  //while ( TimeIter < config_container[ZONE_0]->GetnTime_Iter() && enable_Steady_MDO && precice ->isCouplingOngoing() ) {
+
+  while ((TimeIter < config_container[ZONE_0]->GetnTime_Iter()) &&!enable_Steady_MDO || (TimeIter < config_container[ZONE_0]->GetnTime_Iter()) && enable_Steady_MDO && precice->isCouplingOngoing() ||(TimeIter < config_container[ZONE_0]->GetnTime_Iter()) && enable_Steady_MDO){
+
+    /*--- Perform some preprocessing before starting the time-step simulation. ---*/
+
+
+    if (rank == MASTER_NODE)
+    {
+      cout << "SAVE OLD STATE ?" << endl;
+    }
     if (TimeIter == target_time)
     {
+      if (rank == MASTER_NODE)
+      {
+        std::cout << "Saving old static state!" <<std::endl;
+      }
       /*---Save the current fluid state---*///
-     precice->saveOldStaticState(&StopCalc, dt);
+      precice->saveOldStaticState(&StopCalc, dt);
       
     }
 
-    cout <<" Calling PREPROCESS()" <<endl;
+    if (rank == MASTER_NODE)
+    {
+      std::cout << "STARTING RUNS" << std::endl;
+    }
 
-    /*---- Deform the mesh here based on surface displacements of previous advance---*/
     Preprocess(TimeIter);
 
-              
-    /*---Run implicit iteration---*/
-    RunSMDO(counter);  
-    
-    /*--- Compute tractions baed on current fluid state---*/
+    /*--- Run a time-step iteration of the single-zone problem. ---*/
+
+    RunSMDO();
+
+    /*--- Perform some postprocessing on the solution before the update ---*/
+
     Postprocess();
 
     /*--- Update the solution for dual time stepping strategy ---*/
-    Update();
-    
-    /*--- Monitor the computations after each iteration. ---*/
-    Monitor(TimeIter);
 
+    Update();
+
+    /*--- Monitor the computations after each iteration. ---*/
+
+    Monitor(TimeIter);
 
     /*---Output the required fields to files---*/
     if (!(precice->isCouplingOngoing()))
@@ -151,24 +155,23 @@ void CStaticMDODriver::StartSolver()
         std::cout<<"Writing fluid field at aero-elastic equillibrium"<<std::endl;
       }
 
+
+      /*--- Output the solution in files. ---*/
+
       Output(TimeIter);
 
       /*---Output the deformed mesh---*/
 
       if (rank == MASTER_NODE)
       {
-        std::cout << "Loading mesh data to master node" << std::endl;
+        std::cout << "Writing fluid mesh at aeroelastic equillibrium" << std::endl;
       }
-      output_container[ZONE_0]->LoadData(geometry_container[ZONE_0][INST_0][MESH_0], config_container[ZONE_0], solver_container[ZONE_0][INST_0][MESH_0]);
 
-      if (rank == MASTER_NODE)
-      {
-        std::cout << "Writing deformed mesh to file" <<std::endl;
-      }
+      output_container[ZONE_0]->LoadData(geometry_container[ZONE_0][INST_0][MESH_0], config_container[ZONE_0], solver_container[ZONE_0][INST_0][MESH_0]);
       output_container[ZONE_0]->WriteToFile(config_container[ZONE_0],geometry_container[ZONE_0][INST_0][MESH_0], OUTPUT_TYPE::MESH, config_container[ZONE_0]->GetMesh_Out_FileName());
 
-
       break;
+
     }
 
     if ((TimeIter == target_time) && (precice->isCouplingOngoing()))
@@ -188,47 +191,24 @@ void CStaticMDODriver::StartSolver()
     }
 
     /*--- If the convergence criteria has been met, terminate the simulation. ---*/
-   
-    counter++;
     TimeIter++;
 
-  } /*---Implicit loop ends here---*/
-
-  if (enable_Steady_MDO)
-  {
-    if (precice != NULL)
-    {
-      if (rank == MASTER_NODE)
-      {
-        std::cout <<"---------------------------------------------------------"<<std::endl;
-        std::cout <<"-------------------Deleted MDO object--------------------"<<std::endl;
-        std::cout <<"---------------------------------------------------------"<<std::endl;
-      }
-      delete precice;
-    }
-
-    if (dt != NULL)
-    {
-      delete dt;
-    }
-
-    if (max_precice_dt != NULL)
-    {
-      delete max_precice_dt;
-    }
   }
 
+  if (precice !=NULL)
+  {
+    delete precice;
+    delete dt;
+    delete max_precice_dt;
+  }
 }
-
-
 
 void CStaticMDODriver::Preprocess(unsigned long TimeIter) {
 
-  /*--- Set runtime option ---*/
+  /*--- Set the current time iteration in the config and also in the driver
+   * because the python interface doesn't offer an explicit way of doing it. ---*/
 
-
-  /*--- Set the current time iteration in the config ---*/
-  this->TimeIter= TimeIter;
+  this->TimeIter = TimeIter;
   config_container[ZONE_0]->SetTimeIter(TimeIter);
 
   /*--- Store the current physical time in the config container, as
@@ -240,11 +220,17 @@ void CStaticMDODriver::Preprocess(unsigned long TimeIter) {
   else
     config_container[ZONE_0]->SetPhysicalTime(0.0);
 
+
   /*--- Set the initial condition for EULER/N-S/RANS ---------------------------------------------*/
   if (config_container[ZONE_0]->GetFluidProblem()) {
     solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL]->SetInitialCondition(geometry_container[ZONE_0][INST_0],
                                                                             solver_container[ZONE_0][INST_0],
                                                                             config_container[ZONE_0], TimeIter);
+  }
+  if (config_container[ZONE_0]->GetKind_Species_Model() != SPECIES_MODEL::NONE) {
+    solver_container[ZONE_0][INST_0][MESH_0][SPECIES_SOL]->SetInitialCondition(geometry_container[ZONE_0][INST_0],
+                                                                                solver_container[ZONE_0][INST_0],
+                                                                                config_container[ZONE_0], TimeIter);
   }
   else if (config_container[ZONE_0]->GetHeatProblem()) {
     /*--- Set the initial condition for HEAT equation ---------------------------------------------*/
@@ -264,28 +250,20 @@ void CStaticMDODriver::Preprocess(unsigned long TimeIter) {
   /*--- For the Disc.Adj. of a case with (rigidly) moving grid, the appropriate
           mesh cordinates are read from the restart files. ---*/
   if (!(config_container[ZONE_0]->GetGrid_Movement() && config_container[ZONE_0]->GetDiscrete_Adjoint()))
-  cout <<" Perofrm dynamic mesh update" <<endl;
-
-   // DynamicMeshUpdate(TimeIter);
+    DynamicMeshUpdate(TimeIter);
 
 }
 
-
-
-
-void CStaticMDODriver::RunSMDO(int counter)
-{
+void CStaticMDODriver::RunSMDO() {
 
   unsigned long OuterIter = 0;
   config_container[ZONE_0]->SetOuterIter(OuterIter);
 
-    /*--- Iterate the zone as a block, either to convergence or to a max number of inner iterations for Implicit MDA ---*/
-    iteration_container[ZONE_0][INST_0]->MDOSolve(output_container[ZONE_0], integration_container, geometry_container, solver_container,
-        numerics_container, config_container, surface_movement, grid_movement, FFDBox, ZONE_0, INST_0, counter);
+  /*--- Iterate the zone as a block, either to convergence or to a max number of iterations ---*/
+  iteration_container[ZONE_0][INST_0]->MDOSolve(output_container[ZONE_0], integration_container, geometry_container, solver_container,
+        numerics_container, config_container, surface_movement, grid_movement, FFDBox, ZONE_0, INST_0);
 
 }
-
-
 
 void CStaticMDODriver::Postprocess() {
 
@@ -321,18 +299,17 @@ void CStaticMDODriver::Output(unsigned long TimeIter) {
   bool wrote_files = output_container[ZONE_0]->SetResultFiles(geometry_container[ZONE_0][INST_0][MESH_0],
                                                                config_container[ZONE_0],
                                                                solver_container[ZONE_0][INST_0][MESH_0],
-                                                               0, 1);
+                                                               TimeIter, StopCalc);
 
+  /*--- Save iteration solution for libROM ---*/
+  if (config_container[MESH_0]->GetSave_libROM()) {
+    solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL]->SavelibROM(geometry_container[ZONE_0][INST_0][MESH_0],
+                                                                   config_container[ZONE_0], StopCalc);
+    wrote_files = true;
+  }
 
+  if (wrote_files) {
 
-
-  if (wrote_files)
-  {
-
-    if (rank == MASTER_NODE)
-    {
-      std::cout << " Output files written! " << std::endl;
-    }
     StopTime = SU2_MPI::Wtime();
 
     UsedTimeOutput += StopTime-StartTime;
@@ -340,9 +317,9 @@ void CStaticMDODriver::Output(unsigned long TimeIter) {
     BandwidthSum = config_container[ZONE_0]->GetRestart_Bandwidth_Agg();
 
     StartTime = SU2_MPI::Wtime();
-
-    config_container[ZONE_0]->Set_StartTime(StartTime);
   }
+
+  config_container[ZONE_0]->Set_StartTime(StartTime);
 }
 
 void CStaticMDODriver::DynamicMeshUpdate(unsigned long TimeIter) {
@@ -350,9 +327,7 @@ void CStaticMDODriver::DynamicMeshUpdate(unsigned long TimeIter) {
   auto iteration = iteration_container[ZONE_0][INST_0];
 
   /*--- Legacy dynamic mesh update - Only if GRID_MOVEMENT = YES ---*/
-  if (config_container[ZONE_0]->GetGrid_Movement()) 
-  {
-    cout << "Calling legacy mesh deformation " << endl;
+  if (config_container[ZONE_0]->GetGrid_Movement()) {
     iteration->SetGrid_Movement(geometry_container[ZONE_0][INST_0],surface_movement[ZONE_0],
                                 grid_movement[ZONE_0][INST_0], solver_container[ZONE_0][INST_0],
                                 config_container[ZONE_0], 0, TimeIter);
@@ -391,13 +366,13 @@ bool CStaticMDODriver::Monitor(unsigned long TimeIter){
 
   if (TimeDomain == NO){
 
-    InnerConvergence     = output_container[ZONE_0]->GetConvergence();
+    InnerConvergence = output_container[ZONE_0]->GetConvergence();
     MaxIterationsReached = InnerIter+1 >= nInnerIter;
 
     if ((MaxIterationsReached || InnerConvergence) && (rank == MASTER_NODE)) {
-      cout << endl << "----------------------------- Solver Exit -------------------------------" << endl;
+      cout << "\n----------------------------- Solver Exit -------------------------------" << endl;
       if (InnerConvergence) cout << "All convergence criteria satisfied." << endl;
-      else cout << endl << "Maximum number of iterations reached (ITER = " << nInnerIter << ") before convergence." << endl;
+      else cout << "\nMaximum number of iterations reached (ITER = " << nInnerIter << ") before convergence." << endl;
       output_container[ZONE_0]->PrintConvergenceSummary();
       cout << "-------------------------------------------------------------------------" << endl;
     }
@@ -405,25 +380,23 @@ bool CStaticMDODriver::Monitor(unsigned long TimeIter){
     StopCalc = MaxIterationsReached || InnerConvergence;
   }
 
-
-
   if (TimeDomain == YES) {
 
     /*--- Check whether the outer time integration has reached the final time ---*/
 
     TimeConvergence = GetTimeConvergence();
 
-    FinalTimeReached     = CurTime >= MaxTime;
+    FinalTimeReached = CurTime >= MaxTime;
     MaxIterationsReached = TimeIter+1 >= nTimeIter;
 
     if ((FinalTimeReached || MaxIterationsReached || TimeConvergence) && (rank == MASTER_NODE)){
-      cout << endl << "----------------------------- Solver Exit -------------------------------";
-      if (TimeConvergence)     cout << endl << "All windowed time-averaged convergence criteria are fullfilled." << endl;
-      if (FinalTimeReached)     cout << endl << "Maximum time reached (MAX_TIME = " << MaxTime << "s)." << endl;
-      if (MaxIterationsReached) cout << endl << "Maximum number of time iterations reached (TIME_ITER = " << nTimeIter << ")." << endl;
+      cout << "\n----------------------------- Solver Exit -------------------------------";
+      if (TimeConvergence) cout << "\nAll windowed time-averaged convergence criteria are fullfilled." << endl;
+      if (FinalTimeReached) cout << "\nMaximum time reached (MAX_TIME = " << MaxTime << "s)." << endl;
+      if (MaxIterationsReached) cout << "\nMaximum number of time iterations reached (TIME_ITER = " << nTimeIter << ")." << endl;
       cout << "-------------------------------------------------------------------------" << endl;
     }
-    StopCalc = FinalTimeReached || MaxIterationsReached|| TimeConvergence;
+    StopCalc = FinalTimeReached || MaxIterationsReached || TimeConvergence;
   }
 
   /*--- Reset the inner convergence --- */
@@ -436,7 +409,6 @@ bool CStaticMDODriver::Monitor(unsigned long TimeIter){
 
   return StopCalc;
 }
-
 
 bool CStaticMDODriver::GetTimeConvergence() const{
   return output_container[ZONE_0]->GetCauchyCorrectedTimeConvergence(config_container[ZONE_0]);

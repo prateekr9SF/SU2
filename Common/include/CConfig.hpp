@@ -1174,6 +1174,8 @@ private:
   su2double uq_urlx;            /*!< \brief Under-relaxation factor */
   bool uq_permute;              /*!< \brief Permutation of eigenvectors */
 
+  su2double mdo_time;
+
   unsigned long pastix_fact_freq;  /*!< \brief (Re-)Factorization frequency for PaStiX */
   unsigned short pastix_verb_lvl;  /*!< \brief Verbosity level for PaStiX */
   unsigned short pastix_fill_lvl;  /*!< \brief Fill level for PaStiX ILU */
@@ -3215,6 +3217,12 @@ public:
    * \param[in] val_iter - Current time iterationnumber.
    */
   unsigned long GetTimeIter() const { return TimeIter; }
+
+    /*!
+  * \brief Get the target time iteration number.
+  * \param[in] val_iter - Current time iterationnumber.
+  */
+  double GetTargTimeIter() const { return mdo_time; }
 
   /*!
    * \brief Get the current internal iteration number.
