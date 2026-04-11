@@ -105,6 +105,9 @@ void CIteration::SetGrid_Movement(CGeometry** geometry, CSurfaceMovement* surfac
       if (rank == MASTER_NODE)
       {
         std::cout << "Updating farfield nodes after aeroelastic update" <<std::endl;
+        cout << "SMDO_mode = " << SMDO_mode << endl;
+cout << "config->GetKind_GridMovement() = " << config->GetKind_GridMovement() << endl;
+cout << "Kind_Grid_Movement used = " << Kind_Grid_Movement << endl;
       }
       grid_movement->SetVolume_Deformation(geometry[MESH_0], config, true);
 

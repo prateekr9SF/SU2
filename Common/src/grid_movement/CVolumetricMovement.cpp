@@ -148,31 +148,39 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
      mesh. FEA uses a finite element method discretization of the linear
      elasticity equations (transfers element stiffnesses to point-to-point). ---*/
 
-                  if (rank == MASTER_NODE)
+    if (rank == MASTER_NODE)
     {
-      std::cout <<"Construct stiffness matrix... "<<std::endl;
+      std::cout <<"A: zeroing done "<<std::endl;
     } 
 
     MinVolume = SetFEAMethodContributions_Elem(geometry, config);
-                  if (rank == MASTER_NODE)
+
+    if (rank == MASTER_NODE)
     {
-      std::cout <<"Done constructing stiffness matrix... "<<std::endl;
+      std::cout <<"B: element contributions done " <<std::endl;
     } 
     /*--- Set the boundary and volume displacements (as prescribed by the
      design variable perturbations controlling the surface shape)
      as a Dirichlet BC. ---*/
 
-              if (rank == MASTER_NODE)
-    {
-      std::cout <<"Setting boundary displacements... "<<std::endl;
-    }
+
 
 
     SetBoundaryDisplacements(geometry, config);
 
+    if (rank == MASTER_NODE)
+    {
+      std::cout <<"C: boundary displacements done "<<std::endl;
+    }
+
     /*--- Fix the location of any points in the domain, if requested. ---*/
 
     SetDomainDisplacements(geometry, config);
+
+    if (rank == MASTER_NODE)
+    {
+      std::cout <<"D: domain displacements done "<<std::endl;
+    }
 
     /*--- Set the boundary derivatives (overrides the actual displacements) ---*/
 
@@ -184,16 +192,24 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
      so that all nodes have the same solution and r.h.s. entries
      across all partitions. ---*/
 
-         if (rank == MASTER_NODE)
-    {
-      std::cout << "Communicating prescribed B.C to all nodes... "<<std::endl;
-    }
 
     CSysMatrixComms::Initiate(LinSysSol, geometry, config);
     CSysMatrixComms::Complete(LinSysSol, geometry, config);
 
+    if (rank == MASTER_NODE)
+    {
+      std::cout << "E: LinSysSol comms done "<<std::endl;
+    }
+
+
     CSysMatrixComms::Initiate(LinSysRes, geometry, config);
     CSysMatrixComms::Complete(LinSysRes, geometry, config);
+
+    if (rank == MASTER_NODE)
+    {
+      std::cout << "F: LinSysRes comms done "<<std::endl;
+    }
+
 
     /*--- Definition of the preconditioner matrix vector multiplication, and linear solver ---*/
 
@@ -204,24 +220,44 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
      * normal matrix vector product and preconditioner. For the mesh sensitivities using
      * the discrete adjoint method we solve the system using the transposed matrix. ---*/
     if (!Derivative || ((config->GetKind_SU2() == SU2_COMPONENT::SU2_MDO) && Derivative) ||
-        (config->GetSmoothGradient() && ForwardProjectionDerivative)) {
-      Tot_Iter = System.Solve(StiffMatrix, LinSysRes, LinSysSol, geometry, config);
+        (config->GetSmoothGradient() && ForwardProjectionDerivative)) 
+        
+        {
+          Tot_Iter = System.Solve(StiffMatrix, LinSysRes, LinSysSol, geometry, config);
+          if (rank == MASTER_NODE)
+          {
+            std::cout << "G: solve done" << std::endl;
+          }
 
-    } else if (Derivative && (config->GetKind_SU2() == SU2_COMPONENT::SU2_DOT)) {
-      Tot_Iter = System.Solve_b(StiffMatrix, LinSysRes, LinSysSol, geometry, config);
-    }
+        } 
+        else if (Derivative && (config->GetKind_SU2() == SU2_COMPONENT::SU2_DOT)) 
+        {
+          Tot_Iter = System.Solve_b(StiffMatrix, LinSysRes, LinSysSol, geometry, config);
+        }
+
     su2double Residual = System.GetResidual();
 
     /*--- Update the grid coordinates and cell volumes using the solution
      of the linear system (usol contains the x, y, z displacements). ---*/
 
-    if (!Derivative) {
+    if (!Derivative) 
+    {
       UpdateGridCoord(geometry, config);
-    } else {
+      if (rank == MASTER_NODE)
+      {
+        std::cout << "H: grid coord update done" << std::endl;
+      }
+    } 
+    else 
+    {
       UpdateGridCoord_Derivatives(geometry, config, ForwardProjectionDerivative);
     }
     if (UpdateGeo) {
       UpdateDualGrid(geometry, config);
+      if (rank == MASTER_NODE)
+      {
+        std::cout << "I: dual grid update done" << std::endl;
+      }
     }
 
     if (!Derivative) {
@@ -504,10 +540,6 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
   /*--- Compute the distance to the nearest surface if needed
    as part of the stiffness calculation.. ---*/
 
-   if (rank == MASTER_NODE)
-   {
-    cout <<"COMPUTING WALL DISTANCE" <<endl;
-   }
 
   if ((config->GetDeform_Stiffness_Type() == SOLID_WALL_DISTANCE) || (config->GetDeform_Limit() < 1E6)) {
     ComputeSolid_Wall_Distance(geometry, config, MinDistance, MaxDistance);
@@ -517,12 +549,22 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
 
   /*--- Compute contributions from each element by forming the stiffness matrix (FEA) ---*/
 
-  if (rank == MASTER_NODE)
-  {
-    cout << "Compute element-wise contributions.." <<endl;
-  }
 
-  for (iElem = 0; iElem < geometry->GetnElem(); iElem++) {
+  for (iElem = 0; iElem < geometry->GetnElem(); iElem++) 
+  {
+    if (iElem % 100000 == 0) 
+    {
+      std::cout << "Processing element: " << iElem << std::endl;
+    }
+
+      std::cout << "About to access geometry->elem[" << iElem << "]" << std::endl;
+  std::cout << "geometry->elem ptr = " << geometry->elem << std::endl;
+  std::cout << "geometry->elem[" << iElem << "] ptr = " << geometry->elem[iElem] << std::endl;
+
+  std::cout << "About to call GetVTK_Type" << std::endl;
+  auto vtk_type = geometry->elem[iElem]->GetVTK_Type();
+  std::cout << "VTK type = " << vtk_type << std::endl;
+
     if (geometry->elem[iElem]->GetVTK_Type() == TRIANGLE) nNodes = 3;
     if (geometry->elem[iElem]->GetVTK_Type() == QUADRILATERAL) nNodes = 4;
     if (geometry->elem[iElem]->GetVTK_Type() == TETRAHEDRON) nNodes = 4;
@@ -530,39 +572,58 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
     if (geometry->elem[iElem]->GetVTK_Type() == PRISM) nNodes = 6;
     if (geometry->elem[iElem]->GetVTK_Type() == HEXAHEDRON) nNodes = 8;
 
-      if (rank == MASTER_NODE)
-  {
-    cout << "Done setting node definition based on element type.." <<endl;
-  }
+    std::cout << "nNodes = " << nNodes << std::endl;
 
-    for (iNodes = 0; iNodes < nNodes; iNodes++) {
+
+    for (iNodes = 0; iNodes < nNodes; iNodes++) 
+    {
+      std::cout << "  About to get node " << iNodes << std::endl;
       PointCorners[iNodes] = geometry->elem[iElem]->GetNode(iNodes);
-      for (iDim = 0; iDim < nDim; iDim++) {
+      std::cout << "  PointCorners[" << iNodes << "] = " << PointCorners[iNodes] << std::endl;
+
+      for (iDim = 0; iDim < nDim; iDim++) 
+      {
+        std::cout << "    About to get coord, iDim = " << iDim << std::endl;
         CoordCorners[iNodes][iDim] = geometry->nodes->GetCoord(PointCorners[iNodes], iDim);
+        std::cout << "    Coord = " << CoordCorners[iNodes][iDim] << std::endl;
       }
     }
 
-      if (rank == MASTER_NODE)
-  {
-    cout << "Computed coord corners" <<endl;
-  }
-
     /*--- Extract Element volume and distance to compute the stiffness ---*/
 
+    std::cout << "About to get element volume" << std::endl;
     ElemVolume = geometry->elem[iElem]->GetVolume();
+    std::cout << "ElemVolume = " << ElemVolume << std::endl;
 
-    if ((config->GetDeform_Stiffness_Type() == SOLID_WALL_DISTANCE)) {
-      ElemDistance = 0.0;
-      for (iNodes = 0; iNodes < nNodes; iNodes++)
-        ElemDistance += geometry->nodes->GetWall_Distance(PointCorners[iNodes]);
-      ElemDistance = ElemDistance / (su2double)nNodes;
-    }
+   // if ((config->GetDeform_Stiffness_Type() == SOLID_WALL_DISTANCE)) 
+   // {
+   //   ElemDistance = 0.0;
+   //   for (iNodes = 0; iNodes < nNodes; iNodes++)
+   //     std::cout << "  About to get wall distance for point " << PointCorners[iNodes] << std::endl;
+   //     ElemDistance += geometry->nodes->GetWall_Distance(PointCorners[iNodes]);
+   //   ElemDistance = ElemDistance / (su2double)nNodes;
+   //   std::cout << "ElemDistance = " << ElemDistance << std::endl;
+  //  }
 
-    if (rank == MASTER_NODE)
-    {
-      cout << "Begin setting StiffMatrix for 3D" <<endl;
-    }
+  if ((config->GetDeform_Stiffness_Type() == SOLID_WALL_DISTANCE)) {
+  ElemDistance = 0.0;
 
+  for (iNodes = 0; iNodes < nNodes; iNodes++) {
+    std::cout << "  About to get wall distance for point " << PointCorners[iNodes] << std::endl;
+
+    su2double wd = geometry->nodes->GetWall_Distance(PointCorners[iNodes]);
+
+    std::cout << "  Wall distance for point " << PointCorners[iNodes]
+              << " = " << wd << std::endl;
+
+    ElemDistance += wd;
+  }
+
+  ElemDistance = ElemDistance / (su2double)nNodes;
+  std::cout << "ElemDistance = " << ElemDistance << std::endl;
+}
+
+std::cout << "About to call SetFEA_StiffMatrix" << std::endl;
     if (nDim == 2)
       SetFEA_StiffMatrix2D(geometry, config, StiffMatrix_Elem, PointCorners, CoordCorners, nNodes, ElemVolume,
                            ElemDistance);
@@ -570,34 +631,22 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
       SetFEA_StiffMatrix3D(geometry, config, StiffMatrix_Elem, PointCorners, CoordCorners, nNodes, ElemVolume,
                            ElemDistance);
 
-    if (rank == MASTER_NODE)
-    {
-      cout << "Done with stiffness matrix for 3D" <<endl;
-    }
+    std::cout << "Returned from SetFEA_StiffMatrix" << std::endl;
+
 
     AddFEA_StiffMatrix(geometry, StiffMatrix_Elem, PointCorners, nNodes);
+    std::cout << "Returned from AddFEA_StiffMatrix" << std::endl;
 
-    if (rank == MASTER_NODE)
-    {
-      cout << "ADDFEA_Stiff matrix done" <<endl;
-    }
   }
 
   /*--- Deallocate memory and exit ---*/
 
-      if (rank == MASTER_NODE)
-    {
-      cout << "Clear FEA variables" <<endl;
-    }
 
   for (iVar = 0; iVar < StiffMatrix_nElem; iVar++) 
     delete[] StiffMatrix_Elem[iVar];
   delete[] StiffMatrix_Elem;
 
-  if (rank == MASTER_NODE)
-  {
-    cout <<"Done with clearing memeory" <<endl;
-  }
+
 
   return MinVolume;
 }
@@ -1689,62 +1738,69 @@ void CVolumetricMovement::AddFEA_StiffMatrix(CGeometry* geometry, su2double** St
 
   unsigned short nVar = geometry->GetnDim();
 
-      if (rank == MASTER_NODE)
-    {
-      cout << "In ADD FEA StiffMatrix" <<endl;
-    }
+  std::cout << "Entered AddFEA_StiffMatrix" << std::endl;
+  std::cout << "nNodes = " << nNodes << std::endl;
+  std::cout << "nDim = " << nDim << std::endl;
+  std::cout << "nVar = " << nVar << std::endl;
+  std::cout << "geometry->GetnPoint() = " << geometry->GetnPoint() << std::endl;
+  std::cout << "geometry->GetnPointDomain() = " << geometry->GetnPointDomain() << std::endl;
+
+  for (unsigned short k = 0; k < nNodes; k++) {
+    std::cout << "PointCorners[" << k << "] = " << PointCorners[k] << std::endl;
+  }
 
   su2double** StiffMatrix_Node;
   StiffMatrix_Node = new su2double*[nVar];
   for (iVar = 0; iVar < nVar; iVar++) StiffMatrix_Node[iVar] = new su2double[nVar];
 
   for (iVar = 0; iVar < nVar; iVar++)
-    for (jVar = 0; jVar < nVar; jVar++) StiffMatrix_Node[iVar][jVar] = 0.0;
+    for (jVar = 0; jVar < nVar; jVar++)
+      StiffMatrix_Node[iVar][jVar] = 0.0;
 
-  /*--- Transform the stiffness matrix for the hexahedral element into the
-   contributions for the individual nodes relative to each other. ---*/
+  for (iVar = 0; iVar < nNodes; iVar++) {
+    for (jVar = 0; jVar < nNodes; jVar++) {
 
-         if (rank == MASTER_NODE)
-    {
-      cout << "Begin matrix transformation" <<endl;
-    }
+      std::cout << "----------------------------------------" << std::endl;
+      std::cout << "Element-node pair: iVar = " << iVar
+                << ", jVar = " << jVar << std::endl;
+      std::cout << "Global row point = " << PointCorners[iVar]
+                << ", global col point = " << PointCorners[jVar] << std::endl;
 
-  for (iVar = 0; iVar < nNodes; iVar++) 
-  {
-    for (jVar = 0; jVar < nNodes; jVar++) 
-    {
-      for (iDim = 0; iDim < nVar; iDim++) 
-      {
-        for (jDim = 0; jDim < nVar; jDim++) 
-        {
-          StiffMatrix_Node[iDim][jDim] = StiffMatrix_Elem[(iVar * nVar) + iDim][(jVar * nVar) + jDim];
+      if (PointCorners[iVar] >= geometry->GetnPoint()) {
+        std::cout << "ERROR: PointCorners[iVar] out of bounds" << std::endl;
+        abort();
+      }
+
+      if (PointCorners[jVar] >= geometry->GetnPoint()) {
+        std::cout << "ERROR: PointCorners[jVar] out of bounds" << std::endl;
+        abort();
+      }
+
+      for (iDim = 0; iDim < nVar; iDim++) {
+        for (jDim = 0; jDim < nVar; jDim++) {
+          std::cout << "  Filling local block entry ("
+                    << iDim << "," << jDim << ")" << std::endl;
+
+          StiffMatrix_Node[iDim][jDim] =
+              StiffMatrix_Elem[(iVar * nVar) + iDim][(jVar * nVar) + jDim];
+
+          std::cout << "  StiffMatrix_Node[" << iDim << "]["
+                    << jDim << "] = " << StiffMatrix_Node[iDim][jDim] << std::endl;
         }
       }
 
-std::cout << "rank = " << rank
-          << ", row = " << PointCorners[iVar]
-          << ", col = " << PointCorners[jVar]
-          << ", nPointDomain = " << geometry->GetnPointDomain()
-          << ", nPoint = " << geometry->GetnPoint()
-          << std::endl;
+      std::cout << "About to call AddBlock with row = " << PointCorners[iVar]
+                << ", col = " << PointCorners[jVar] << std::endl;
 
       StiffMatrix.AddBlock(PointCorners[iVar], PointCorners[jVar], StiffMatrix_Node);
 
-                        if (rank == MASTER_NODE)
-    {
-      cout << "Done with matrix transformation" <<endl;
-    }
-
-
+      std::cout << "Returned from AddBlock" << std::endl;
     }
   }
 
-      if (rank == MASTER_NODE)
-    {
-      cout << "Done with ADD FEA StiffMatrix" <<endl;
-    }
-
-  /*--- Deallocate memory and exit ---*/
+  if (rank == MASTER_NODE) {
+    cout << "Done with ADD FEA StiffMatrix" << endl;
+  }
 
   for (iVar = 0; iVar < nVar; iVar++) delete[] StiffMatrix_Node[iVar];
   delete[] StiffMatrix_Node;
