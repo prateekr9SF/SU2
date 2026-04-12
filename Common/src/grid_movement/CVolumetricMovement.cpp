@@ -47,11 +47,11 @@ CVolumetricMovement::CVolumetricMovement(CGeometry* geometry, CConfig* config)
   nIterMesh = 0;
 
   /*--- Initialize matrix, solution, and r.h.s. structures for the linear solver. ---*/
-  if (config->GetVolumetric_Movement() || config->GetSmoothGradient()) {
+  //if (config->GetVolumetric_Movement() || config->GetSmoothGradient()) {
     LinSysSol.Initialize(nPoint, nPointDomain, nVar, 0.0);
     LinSysRes.Initialize(nPoint, nPointDomain, nVar, 0.0);
     StiffMatrix.Initialize(nPoint, nPointDomain, nVar, nVar, false, geometry, config);
-  }
+ // }
 }
 
 CVolumetricMovement::~CVolumetricMovement() = default;
@@ -552,18 +552,18 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
 
   for (iElem = 0; iElem < geometry->GetnElem(); iElem++) 
   {
-    if (iElem % 100000 == 0) 
-    {
-      std::cout << "Processing element: " << iElem << std::endl;
-    }
+   // if (iElem % 100000 == 0) 
+   // {
+   //   std::cout << "Processing element: " << iElem << std::endl;
+  //  }
 
-      std::cout << "About to access geometry->elem[" << iElem << "]" << std::endl;
-  std::cout << "geometry->elem ptr = " << geometry->elem << std::endl;
-  std::cout << "geometry->elem[" << iElem << "] ptr = " << geometry->elem[iElem] << std::endl;
+     // std::cout << "About to access geometry->elem[" << iElem << "]" << std::endl;
+ // std::cout << "geometry->elem ptr = " << geometry->elem << std::endl;
+ // std::cout << "geometry->elem[" << iElem << "] ptr = " << geometry->elem[iElem] << std::endl;
 
-  std::cout << "About to call GetVTK_Type" << std::endl;
+ // std::cout << "About to call GetVTK_Type" << std::endl;
   auto vtk_type = geometry->elem[iElem]->GetVTK_Type();
-  std::cout << "VTK type = " << vtk_type << std::endl;
+//  std::cout << "VTK type = " << vtk_type << std::endl;
 
     if (geometry->elem[iElem]->GetVTK_Type() == TRIANGLE) nNodes = 3;
     if (geometry->elem[iElem]->GetVTK_Type() == QUADRILATERAL) nNodes = 4;
@@ -572,28 +572,28 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
     if (geometry->elem[iElem]->GetVTK_Type() == PRISM) nNodes = 6;
     if (geometry->elem[iElem]->GetVTK_Type() == HEXAHEDRON) nNodes = 8;
 
-    std::cout << "nNodes = " << nNodes << std::endl;
+  //  std::cout << "nNodes = " << nNodes << std::endl;
 
 
     for (iNodes = 0; iNodes < nNodes; iNodes++) 
     {
-      std::cout << "  About to get node " << iNodes << std::endl;
+     // std::cout << "  About to get node " << iNodes << std::endl;
       PointCorners[iNodes] = geometry->elem[iElem]->GetNode(iNodes);
-      std::cout << "  PointCorners[" << iNodes << "] = " << PointCorners[iNodes] << std::endl;
+    //  std::cout << "  PointCorners[" << iNodes << "] = " << PointCorners[iNodes] << std::endl;
 
       for (iDim = 0; iDim < nDim; iDim++) 
       {
-        std::cout << "    About to get coord, iDim = " << iDim << std::endl;
+      //  std::cout << "    About to get coord, iDim = " << iDim << std::endl;
         CoordCorners[iNodes][iDim] = geometry->nodes->GetCoord(PointCorners[iNodes], iDim);
-        std::cout << "    Coord = " << CoordCorners[iNodes][iDim] << std::endl;
+      //  std::cout << "    Coord = " << CoordCorners[iNodes][iDim] << std::endl;
       }
     }
 
     /*--- Extract Element volume and distance to compute the stiffness ---*/
 
-    std::cout << "About to get element volume" << std::endl;
+   // std::cout << "About to get element volume" << std::endl;
     ElemVolume = geometry->elem[iElem]->GetVolume();
-    std::cout << "ElemVolume = " << ElemVolume << std::endl;
+   // std::cout << "ElemVolume = " << ElemVolume << std::endl;
 
    // if ((config->GetDeform_Stiffness_Type() == SOLID_WALL_DISTANCE)) 
    // {
@@ -609,21 +609,21 @@ su2double CVolumetricMovement::SetFEAMethodContributions_Elem(CGeometry* geometr
   ElemDistance = 0.0;
 
   for (iNodes = 0; iNodes < nNodes; iNodes++) {
-    std::cout << "  About to get wall distance for point " << PointCorners[iNodes] << std::endl;
+//    std::cout << "  About to get wall distance for point " << PointCorners[iNodes] << std::endl;
 
     su2double wd = geometry->nodes->GetWall_Distance(PointCorners[iNodes]);
 
-    std::cout << "  Wall distance for point " << PointCorners[iNodes]
-              << " = " << wd << std::endl;
+   // std::cout << "  Wall distance for point " << PointCorners[iNodes]
+   //           << " = " << wd << std::endl;
 
     ElemDistance += wd;
   }
 
   ElemDistance = ElemDistance / (su2double)nNodes;
-  std::cout << "ElemDistance = " << ElemDistance << std::endl;
+ // std::cout << "ElemDistance = " << ElemDistance << std::endl;
 }
 
-std::cout << "About to call SetFEA_StiffMatrix" << std::endl;
+//std::cout << "About to call SetFEA_StiffMatrix" << std::endl;
     if (nDim == 2)
       SetFEA_StiffMatrix2D(geometry, config, StiffMatrix_Elem, PointCorners, CoordCorners, nNodes, ElemVolume,
                            ElemDistance);
@@ -631,11 +631,11 @@ std::cout << "About to call SetFEA_StiffMatrix" << std::endl;
       SetFEA_StiffMatrix3D(geometry, config, StiffMatrix_Elem, PointCorners, CoordCorners, nNodes, ElemVolume,
                            ElemDistance);
 
-    std::cout << "Returned from SetFEA_StiffMatrix" << std::endl;
+  //  std::cout << "Returned from SetFEA_StiffMatrix" << std::endl;
 
 
     AddFEA_StiffMatrix(geometry, StiffMatrix_Elem, PointCorners, nNodes);
-    std::cout << "Returned from AddFEA_StiffMatrix" << std::endl;
+   // std::cout << "Returned from AddFEA_StiffMatrix" << std::endl;
 
   }
 
@@ -1738,16 +1738,16 @@ void CVolumetricMovement::AddFEA_StiffMatrix(CGeometry* geometry, su2double** St
 
   unsigned short nVar = geometry->GetnDim();
 
-  std::cout << "Entered AddFEA_StiffMatrix" << std::endl;
-  std::cout << "nNodes = " << nNodes << std::endl;
-  std::cout << "nDim = " << nDim << std::endl;
-  std::cout << "nVar = " << nVar << std::endl;
-  std::cout << "geometry->GetnPoint() = " << geometry->GetnPoint() << std::endl;
-  std::cout << "geometry->GetnPointDomain() = " << geometry->GetnPointDomain() << std::endl;
+  //std::cout << "Entered AddFEA_StiffMatrix" << std::endl;
+  //std::cout << "nNodes = " << nNodes << std::endl;
+  //std::cout << "nDim = " << nDim << std::endl;
+  //std::cout << "nVar = " << nVar << std::endl;
+ // std::cout << "geometry->GetnPoint() = " << geometry->GetnPoint() << std::endl;
+ // std::cout << "geometry->GetnPointDomain() = " << geometry->GetnPointDomain() << std::endl;
 
-  for (unsigned short k = 0; k < nNodes; k++) {
-    std::cout << "PointCorners[" << k << "] = " << PointCorners[k] << std::endl;
-  }
+ // for (unsigned short k = 0; k < nNodes; k++) {
+ //   std::cout << "PointCorners[" << k << "] = " << PointCorners[k] << std::endl;
+ // }
 
   su2double** StiffMatrix_Node;
   StiffMatrix_Node = new su2double*[nVar];
@@ -1760,11 +1760,11 @@ void CVolumetricMovement::AddFEA_StiffMatrix(CGeometry* geometry, su2double** St
   for (iVar = 0; iVar < nNodes; iVar++) {
     for (jVar = 0; jVar < nNodes; jVar++) {
 
-      std::cout << "----------------------------------------" << std::endl;
-      std::cout << "Element-node pair: iVar = " << iVar
-                << ", jVar = " << jVar << std::endl;
-      std::cout << "Global row point = " << PointCorners[iVar]
-                << ", global col point = " << PointCorners[jVar] << std::endl;
+   //   std::cout << "----------------------------------------" << std::endl;
+   //   std::cout << "Element-node pair: iVar = " << iVar
+   //             << ", jVar = " << jVar << std::endl;
+   //   std::cout << "Global row point = " << PointCorners[iVar]
+   //             << ", global col point = " << PointCorners[jVar] << std::endl;
 
       if (PointCorners[iVar] >= geometry->GetnPoint()) {
         std::cout << "ERROR: PointCorners[iVar] out of bounds" << std::endl;
@@ -1778,23 +1778,23 @@ void CVolumetricMovement::AddFEA_StiffMatrix(CGeometry* geometry, su2double** St
 
       for (iDim = 0; iDim < nVar; iDim++) {
         for (jDim = 0; jDim < nVar; jDim++) {
-          std::cout << "  Filling local block entry ("
-                    << iDim << "," << jDim << ")" << std::endl;
+    //      std::cout << "  Filling local block entry ("
+    //                << iDim << "," << jDim << ")" << std::endl;
 
           StiffMatrix_Node[iDim][jDim] =
               StiffMatrix_Elem[(iVar * nVar) + iDim][(jVar * nVar) + jDim];
 
-          std::cout << "  StiffMatrix_Node[" << iDim << "]["
-                    << jDim << "] = " << StiffMatrix_Node[iDim][jDim] << std::endl;
+    //      std::cout << "  StiffMatrix_Node[" << iDim << "]["
+    //                << jDim << "] = " << StiffMatrix_Node[iDim][jDim] << std::endl;
         }
       }
 
-      std::cout << "About to call AddBlock with row = " << PointCorners[iVar]
-                << ", col = " << PointCorners[jVar] << std::endl;
+   //   std::cout << "About to call AddBlock with row = " << PointCorners[iVar]
+   //             << ", col = " << PointCorners[jVar] << std::endl;
 
       StiffMatrix.AddBlock(PointCorners[iVar], PointCorners[jVar], StiffMatrix_Node);
 
-      std::cout << "Returned from AddBlock" << std::endl;
+   //   std::cout << "Returned from AddBlock" << std::endl;
     }
   }
 

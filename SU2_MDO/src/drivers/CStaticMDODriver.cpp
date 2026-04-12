@@ -119,11 +119,11 @@ void CStaticMDODriver::StartSolver()
     if (TimeIter == target_time)
     {
       /*---Save the current fluid state---*///
-    // precice->saveOldStaticState(&StopCalc, dt);
+     precice->saveOldStaticState(&StopCalc, dt);
       
     }
 
-    cout <<" Calling PREPROCESS()" <<endl;
+    //cout <<" Calling PREPROCESS()" <<endl;
 
     /*---- Deform the mesh here based on surface displacements of previous advance---*/
     Preprocess(TimeIter);
