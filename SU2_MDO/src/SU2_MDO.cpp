@@ -109,8 +109,15 @@ int main(int argc, char *argv[]) {
 
   if (MDO_steady)
   {
+
+    
+    
+      cout << "Starting CStaticMDO in SU2_MDO.cpp" <<endl;
+    
     driver = new CStaticMDODriver(config_file_name, nZone, MPICommunicator);
   }
+
+  cout << "Done initializing driver" <<endl;
 
   if (dry_run) 
   {

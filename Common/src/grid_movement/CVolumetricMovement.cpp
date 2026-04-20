@@ -1798,10 +1798,6 @@ void CVolumetricMovement::AddFEA_StiffMatrix(CGeometry* geometry, su2double** St
     }
   }
 
-  if (rank == MASTER_NODE) {
-    cout << "Done with ADD FEA StiffMatrix" << endl;
-  }
-
   for (iVar = 0; iVar < nVar; iVar++) delete[] StiffMatrix_Node[iVar];
   delete[] StiffMatrix_Node;
 }

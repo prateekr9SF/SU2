@@ -264,7 +264,7 @@ void CStaticMDODriver::Preprocess(unsigned long TimeIter) {
   /*--- For the Disc.Adj. of a case with (rigidly) moving grid, the appropriate
           mesh cordinates are read from the restart files. ---*/
   if (!(config_container[ZONE_0]->GetGrid_Movement() && config_container[ZONE_0]->GetDiscrete_Adjoint()))
-  cout <<" Perofrm dynamic mesh update" <<endl;
+ 
 
    DynamicMeshUpdate(TimeIter);
 
@@ -349,24 +349,13 @@ void CStaticMDODriver::DynamicMeshUpdate(unsigned long TimeIter) {
 
   auto iteration = iteration_container[ZONE_0][INST_0];
 
-  if (rank == MASTER_NODE)
-  {
-
-    cout << "=== DynamicMeshUpdate debug ===" << endl;
-    cout << "iteration = " << iteration << endl;
-    cout << "config = " << config_container[ZONE_0] << endl;
-    cout << "geometry = " << geometry_container[ZONE_0][INST_0] << endl;
-    cout << "surface_movement = " << surface_movement[ZONE_0] << endl;
-    cout << "grid_movement = " << grid_movement[ZONE_0][INST_0] << endl;
-    cout << "solver[MESH_0] = " << solver_container[ZONE_0][INST_0][MESH_0] << endl;
-    cout << "numerics[MESH_0] = " << numerics_container[ZONE_0][INST_0][MESH_0] << endl;
-    cout << "GRID_MOVEMENT = " << config_container[ZONE_0]->GetGrid_Movement() << endl;
-    cout << "DEFORM_MESH = " << config_container[ZONE_0]->GetDeform_Mesh() << endl;
-  }
   /*--- Legacy dynamic mesh update - Only if GRID_MOVEMENT = YES ---*/
   if (config_container[ZONE_0]->GetGrid_Movement()) 
   {
-    cout << "Calling legacy mesh deformation " << endl;
+    if (rank == MASTER_NODE)
+    {
+      cout << "Calling legacy mesh deformation " << endl;
+    }
     iteration->SetGrid_Movement(geometry_container[ZONE_0][INST_0],surface_movement[ZONE_0],
                                 grid_movement[ZONE_0][INST_0], solver_container[ZONE_0][INST_0],
                                 config_container[ZONE_0], 0, TimeIter);
@@ -374,13 +363,18 @@ void CStaticMDODriver::DynamicMeshUpdate(unsigned long TimeIter) {
 
   /*--- New solver - all the other routines in SetGrid_Movement should be adapted to this one ---*/
   /*--- Works if DEFORM_MESH = YES ---*/
-
-  cout << "Calling new mesh deformation solver " << endl;
-  iteration->SetMesh_Deformation(geometry_container[ZONE_0][INST_0],
-                                 solver_container[ZONE_0][INST_0][MESH_0],
-                                 numerics_container[ZONE_0][INST_0][MESH_0],
-                                 config_container[ZONE_0], RECORDING::CLEAR_INDICES);
-
+  if (config_container[ZONE_0]->GetDeform_Mesh())
+  {
+    if (rank == MASTER_NODE)
+    {
+      cout << "Skipping new mesh deformation routine. Set DEFORM_MESH=NO in config file!" << endl;
+    }
+  
+    // iteration->SetMesh_Deformation(geometry_container[ZONE_0][INST_0],
+    //                                solver_container[ZONE_0][INST_0][MESH_0],
+    //                                numerics_container[ZONE_0][INST_0][MESH_0],
+    //                                config_container[ZONE_0], RECORDING::CLEAR_INDICES);
+  }
   /*--- Update the wall distances if the mesh was deformed. ---*/
   if (config_container[ZONE_0]->GetGrid_Movement() ||
       config_container[ZONE_0]->GetDeform_Mesh()) {

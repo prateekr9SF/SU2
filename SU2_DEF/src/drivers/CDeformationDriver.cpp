@@ -48,6 +48,8 @@ CDeformationDriver::CDeformationDriver(char* confFile, SU2_Comm MPICommunicator)
 
   InitializeGeometry();
 
+  cout << " IN CDEF DRIVER" << endl;
+
   /*--- Preprocessing of the output for all zones. ---*/
 
   PreprocessOutput();
@@ -125,19 +127,40 @@ void CDeformationDriver::PreprocessInput() {
 
 void CDeformationDriver::InitializeGeometry() {
   for (iZone = 0; iZone < nZone; iZone++) {
+
+    if (rank == MASTER_NODE)
+    {
+      cout <<"In initialize geometry..." << endl;
+    }
     /*--- Definition of the geometry class to store the primal grid in the partitioning process. ---*/
 
     CGeometry* geometry_aux = nullptr;
 
     /*--- All ranks process the grid and call ParMETIS for partitioning. ---*/
 
-    geometry_aux = new CPhysicalGeometry(config_container[iZone], iZone, nZone);
+    if (rank == MASTER_NODE)
+    { 
+      cout << "Setting physical geometry....." << endl;
+    }
 
-    /*--- Color the initial grid and set the send-receive domains (ParMETIS). ---*/
+      geometry_aux = new CPhysicalGeometry(config_container[iZone], iZone, nZone);
 
-    geometry_aux->SetColorGrid_Parallel(config_container[iZone]);
+      /*--- Color the initial grid and set the send-receive domains (ParMETIS). ---*/
 
+      geometry_aux->SetColorGrid_Parallel(config_container[iZone]);
+
+    if (rank == MASTER_NODE)
+    {
+      cout << "Dont setting physical geometry" << endl;
+    }
+
+    
     /*--- Build the grid data structures using the ParMETIS coloring. ---*/
+
+    if (rank == MASTER_NODE)
+    {
+      cout << " Set geometry structure " <<endl;
+    }
 
     unsigned short nInst_Zone = nInst[iZone];
     unsigned short nMesh = 1;
@@ -146,17 +169,31 @@ void CDeformationDriver::InitializeGeometry() {
     geometry_container[iZone][INST_0] = new CGeometry*[nMesh]();
     geometry_container[iZone][INST_0][MESH_0] = new CPhysicalGeometry(geometry_aux, config_container[iZone]);
 
+    if (rank == MASTER_NODE)
+    {
+      cout << "Done!" << endl;
+    }
     /*--- Deallocate the memory of geometry_aux. ---*/
 
     delete geometry_aux;
 
     /*--- Add the Send/Receive boundaries. ---*/
 
+    if (rank == MASTER_NODE)
+    {
+      cout << "send and recieve boundaries" << endl;
+    }
+
     geometry_container[iZone][INST_0][MESH_0]->SetSendReceive(config_container[iZone]);
 
     /*--- Add the Send/Receive boundaries. ---*/
 
     geometry_container[iZone][INST_0][MESH_0]->SetBoundaries(config_container[iZone]);
+
+    if (rank == MASTER_NODE)
+    {
+      cout << " Done with send/recieve!" << endl;
+    }
 
     /*--- Computational grid preprocessing. ---*/
 

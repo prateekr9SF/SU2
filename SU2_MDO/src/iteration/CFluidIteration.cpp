@@ -438,8 +438,6 @@ void CFluidIteration::MDOSolve(COutput* output, CIntegration**** integration, CG
 
   StartTime = SU2_MPI::Wtime();
 
-  cout << "I am in MDO SOLVE!" << endl;
-
   /*--- Preprocess the solver ---*/
   Preprocess(output, integration, geometry, solver, numerics, config, surface_movement, grid_movement, FFDBox,
              val_iZone, INST_0);

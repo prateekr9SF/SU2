@@ -124,9 +124,11 @@ CPhysicalGeometry::CPhysicalGeometry(CConfig* config, unsigned short val_iZone, 
     }
   }
 
-  /*--- If SU2_DEF then write a file with the boundary information ---*/
+  /*--- If SU2_DEF or SU2_MDO then write a file with the boundary information ---*/
 
-  if ((config->GetKind_SU2() == SU2_COMPONENT::SU2_DEF) && (rank == MASTER_NODE)) {
+  if ( (rank == MASTER_NODE) &&
+     (config->GetKind_SU2() == SU2_COMPONENT::SU2_DEF ||
+      config->GetKind_SU2() == SU2_COMPONENT::SU2_MDO) ) {
     string str = "boundary.dat";
 
     str = config->GetMultizone_FileName(str, val_iZone, ".dat");

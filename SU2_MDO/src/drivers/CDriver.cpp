@@ -720,6 +720,11 @@ void CDriver::InitializeGeometryFVM(CConfig *config, CGeometry **&geometry) {
   /*--- Allocate the memory of the current domain, and divide the grid
      between the ranks. ---*/
 
+     if (rank == MASTER_NODE)
+     {
+      cout << "In InitializeGeometryFVM() in CDriver.cpp" <<endl;
+     }
+
   geometry = new CGeometry *[config->GetnMGLevels()+1] ();
 
   /*--- Build the grid data structures using the ParMETIS coloring. ---*/

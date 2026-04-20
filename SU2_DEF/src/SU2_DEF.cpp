@@ -29,6 +29,8 @@
 
 int main(int argc, char* argv[]) {
 
+  cout << "SHOULD I INITILAIZE ? " << endl;
+
 
   char config_file_name[MAX_STRING_SIZE];
 
@@ -53,11 +55,17 @@ int main(int argc, char* argv[]) {
 
   /*--- Initialize the mesh deformation driver. ---*/
 
+  cout << " LAUNCH DRIVER...." <<endl;
+
   CDeformationDriver driver(config_file_name, comm);
 
 
   /*--- Launch the main external loop of the solver. ---*/
 
+
+  
+    cout << " Launching the main external loop" << endl;
+  
 
   
   driver.Run();
