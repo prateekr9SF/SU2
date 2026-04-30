@@ -128,6 +128,22 @@ void CStaticMDODriver::StartSolver()
     /*---- Deform the mesh here based on surface displacements of previous advance---*/
     Preprocess(TimeIter);
 
+    if (rank == MASTER_NODE)
+    {
+      cout << "Writing intermediate deformed mesh " <<endl;
+    }
+
+    std::string mesh_filename = "deformed_mesh_MDA.su2";
+
+    /*--- Overwrite deformed mesh at every implicit FSI iteration ---*/
+    if (enable_Steady_MDO && TimeIter == target_time)
+    {
+      output_container[ZONE_0]->LoadData(geometry_container[ZONE_0][INST_0][MESH_0],config_container[ZONE_0],solver_container[ZONE_0][INST_0][MESH_0]);
+
+      output_container[ZONE_0]->WriteToFile(config_container[ZONE_0],geometry_container[ZONE_0][INST_0][MESH_0],OUTPUT_TYPE::MESH,mesh_filename);
+    }
+
+
               
     /*---Run implicit iteration---*/
     RunSMDO(counter);  
@@ -182,6 +198,10 @@ void CStaticMDODriver::StartSolver()
       /*---Stay at the current time---*/
       TimeIter--;      
 
+      if (rank == MASTER_NODE)
+      {
+        cout << " Check here for numerical grid orientation here" << endl;
+      }
       /*---Reload the fluid state---*/
       precice->reloadOldStaticState(&StopCalc, dt);
 

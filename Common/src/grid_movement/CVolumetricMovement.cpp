@@ -252,12 +252,25 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
     {
       UpdateGridCoord_Derivatives(geometry, config, ForwardProjectionDerivative);
     }
-    if (UpdateGeo) {
+    if (UpdateGeo) 
+    {
       UpdateDualGrid(geometry, config);
+
       if (rank == MASTER_NODE)
       {
         std::cout << "I: dual grid update done" << std::endl;
       }
+
+      if (rank == MASTER_NODE)
+      {
+        std::cout <<"Checking numerical grid orientation and mesh quality for the deformed mesh" << endl;
+      }
+
+      geometry->Check_IntElem_Orientation(config);
+      geometry->Check_BoundElem_Orientation(config);
+      ComputeDeforming_Element_Volume(geometry, MinVolume, MaxVolume, Screen_Output);
+      geometry->ComputeMeshQualityStatistics(config);
+      geometry->ComputeSurf_Curvature(config);
     }
 
     if (!Derivative) {
