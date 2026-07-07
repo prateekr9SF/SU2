@@ -17,10 +17,10 @@ import pandas as pd
 # User Inputs
 # ==========================================================
 
-MAC   = 7.01     # Mean Aerodynamic Chord [m]
-MAC_X = 15.20    # LEMAC x-coordinate [m]
-MAC_Y = 6.80     # LEMAC y-coordinate [m]
-MAC_Z = 0.50     # LEMAC z-coordinate [m]
+MAC   = 3.19     # Mean Aerodynamic Chord [m]
+MAC_X = 19.64727    # LEMAC x-coordinate [m]
+MAC_Y = 7.72524     # LEMAC y-coordinate [m]
+MAC_Z = 0.00366    # LEMAC z-coordinate [m]
 
 # CG locations to evaluate (% MAC)
 cg_percentages = [10, 15, 25, 35, 45]

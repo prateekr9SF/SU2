@@ -1,7 +1,7 @@
 import numpy as np
 
 # User input: angle of attack in degrees
-aoa_deg = 2.16978059927445
+aoa_deg = 4
 
 alpha = np.deg2rad(aoa_deg)
 c = np.cos(alpha)
