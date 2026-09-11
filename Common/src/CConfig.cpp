@@ -1436,8 +1436,6 @@ void CConfig::SetConfig_Options() {
   addDoubleOption("SIDESLIP_ANGLE", AoS, 0.0);
   /*!\brief AOA  \n DESCRIPTION: Angle of attack (degrees, only for compressible flows) \ingroup Config*/
   addDoubleOption("AOA", AoA, 0.0);
-    /*!\brief AOA_FD  \n DESCRIPTION: Angle of attack perturbation for designing at fixed AoA instead of fixed CL \ingroup Config*/
-  addDoubleOption("AOA_FD", AoA_FD, 0.0);
   /* DESCRIPTION: Activate fixed CL mode (specify a CL instead of AoA). */
   addBoolOption("FIXED_CL_MODE", Fixed_CL_Mode, false);
   /* DESCRIPTION: Evaluate the dOF_dCL or dOF_dCMy during run time. */

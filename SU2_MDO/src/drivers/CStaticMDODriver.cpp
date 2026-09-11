@@ -211,7 +211,7 @@ void CStaticMDODriver::StartSolver()
       config_container[ZONE_0]->SetAoA(AoA_pert);
 
       // Do not allow the CL driver to modify AoA
-      config_container[ZONE_0]->Set_CL_Driver_Mode(false);
+      //config_container[ZONE_0]->Set_CL_Driver_Mode(false);
 
       /* Re-evaluate fluid residual without calling:
         Preprocess()
@@ -238,7 +238,7 @@ void CStaticMDODriver::StartSolver()
         std::cout << "dCL/dAoA        = " << dCL_dAoA
                   << " 1/deg" << std::endl;
       }
-      
+
       break;
     }
 
