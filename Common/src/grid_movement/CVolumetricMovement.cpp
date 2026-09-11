@@ -269,6 +269,13 @@ void CVolumetricMovement::SetVolume_Deformation(CGeometry* geometry, CConfig* co
       geometry->Check_IntElem_Orientation(config);
       geometry->Check_BoundElem_Orientation(config);
       ComputeDeforming_Element_Volume(geometry, MinVolume, MaxVolume, Screen_Output);
+
+      if (rank == MASTER_NODE)
+      {
+        cout << "Min. volume:" << MinVolume <<endl;
+        cout << "Max. volume:" << MaxVolume <<endl;
+      }
+
       geometry->ComputeMeshQualityStatistics(config);
       geometry->ComputeSurf_Curvature(config);
     }

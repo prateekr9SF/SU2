@@ -666,6 +666,7 @@ private:
   su2double Froude;           /*!< \brief Froude number. */
   su2double Length_Reynolds;  /*!< \brief Reynolds length (dimensional). */
   su2double AoA,              /*!< \brief Angle of attack (just external flow). */
+  su2double AoA_FD,              /*!< \brief Perturbed Angle of attack (just external flow). */
   iH, AoS, AoA_Offset,
   AoS_Offset, AoA_Sens;       /*!< \brief Angle of sideSlip (just external flow). */
   bool Fixed_CL_Mode;         /*!< \brief Activate fixed CL mode (external flow only). */
@@ -2741,6 +2742,13 @@ public:
    * \return Value of the angle of attack.
    */
   su2double GetAoA(void) const { return AoA; }
+
+  /*!
+   * \brief Get the angle of attack of the body perturbation size. This perturbation factor adds to the current
+            AoA to for finite differneces
+   * \return Value of the angle of attack.
+   */
+  su2double GetAoA_FD(void) const { return AoA_FD; }
 
   /*!
    * \brief Get the off set angle of attack of the body. The solution and the geometry

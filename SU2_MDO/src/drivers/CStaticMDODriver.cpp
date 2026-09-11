@@ -164,9 +164,16 @@ void CStaticMDODriver::StartSolver()
       if(rank==MASTER_NODE)
       {
         std::cout<<"Aero-elastic solution converged!"<<std::endl;
-        std::cout<<"Writing fluid field at aero-elastic equillibrium"<<std::endl;
+        std::cout<<"Writing fluid state at aero-elastic equillibrium"<<std::endl;
       }
 
+      // Save AoA at aeroelastic state
+      su2double AoA_base = config_container[ZONE_0]->GetAoA();
+
+      // Save CL at aeroeasltic state
+      su2double CL_base = solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL] ->GetTotal_CL();
+
+      // Write converged aeroelastic output
       Output(TimeIter);
 
       /*---Output the deformed mesh---*/
@@ -184,6 +191,54 @@ void CStaticMDODriver::StartSolver()
       output_container[ZONE_0]->WriteToFile(config_container[ZONE_0],geometry_container[ZONE_0][INST_0][MESH_0], OUTPUT_TYPE::MESH, config_container[ZONE_0]->GetMesh_Out_FileName());
 
 
+      /* All equillibrium output is safely written. 
+         Perturb AoA on the fixed deformed mesh */
+      const su2double dAoA = 0.01;
+      su2double AoA_pert = AoA_base + dAoA;
+
+     if (rank == MASTER_NODE)
+      {
+        std::cout << std::endl;
+        std::cout << "-----------------------------------------" << std::endl;
+        std::cout << "Computing forward FD dCL/dAoA" << std::endl;
+        std::cout << "Baseline AoA  : " << AoA_base << std::endl;
+        std::cout << "Perturbed AoA : " << AoA_pert << std::endl;
+        std::cout << "Baseline CL   : " << CL_base << std::endl;
+        std::cout << "-----------------------------------------" << std::endl;
+      }
+
+      // Apply AoA perturbation 
+      config_container[ZONE_0]->SetAoA(AoA_pert);
+
+      // Do not allow the CL driver to modify AoA
+      config_container[ZONE_0]->Set_CL_Driver_Mode(false);
+
+      /* Re-evaluate fluid residual without calling:
+        Preprocess()
+        DynamicMeshUpdate()
+        precice-advance()
+
+        We compute sensitivity at FROZEN geometry 
+      */
+
+      RunSMDO(counter);
+
+      Postprocess();
+
+      // Obtain perturbed CL and calculate derivative
+      su2double CL_pert = solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL] ->GetTotal_CL();
+
+      su2double dCL_dAoA = (CL_pert - CL_base) / dAoA;
+
+      if (rank == MASTER_NODE)
+      {
+        std::cout << std::endl;
+        std::cout << "CL(alpha)       = " << CL_base << std::endl;
+        std::cout << "CL(alpha+dAoA)  = " << CL_pert << std::endl;
+        std::cout << "dCL/dAoA        = " << dCL_dAoA
+                  << " 1/deg" << std::endl;
+      }
+      
       break;
     }
 
