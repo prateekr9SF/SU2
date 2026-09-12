@@ -193,7 +193,7 @@ void CStaticMDODriver::StartSolver()
 
       /* All equillibrium output is safely written. 
          Perturb AoA on the fixed deformed mesh */
-      const su2double dAoA = 1.0;
+      const su2double dAoA = 0.01;
       su2double AoA_pert = AoA_base + dAoA;
 
      if (rank == MASTER_NODE)
