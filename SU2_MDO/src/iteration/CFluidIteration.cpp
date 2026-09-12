@@ -33,26 +33,30 @@
 void CFluidIteration::Preprocess(COutput* output, CIntegration**** integration, CGeometry**** geometry,
                                  CSolver***** solver, CNumerics****** numerics, CConfig** config,
                                  CSurfaceMovement** surface_movement, CVolumetricMovement*** grid_movement,
-                                 CFreeFormDefBox*** FFDBox, unsigned short val_iZone, unsigned short val_iInst) {
-  unsigned long TimeIter = config[val_iZone]->GetTimeIter();
+                                 CFreeFormDefBox*** FFDBox, unsigned short val_iZone, unsigned short val_iInst) 
+  {
+    unsigned long TimeIter = config[val_iZone]->GetTimeIter();
 
-  bool fsi = config[val_iZone]->GetFSI_Simulation();
-  unsigned long OuterIter = config[val_iZone]->GetOuterIter();
+    bool fsi = config[val_iZone]->GetFSI_Simulation();
+    unsigned long OuterIter = config[val_iZone]->GetOuterIter();
 
-  /*--- Set the initial condition for FSI problems with subiterations ---*/
-  /*--- This is done only in the first block subiteration.---*/
-  /*--- From then on, the solver reuses the partially converged solution obtained in the previous subiteration ---*/
-  if (fsi && !config[val_iZone]->GetDiscrete_Adjoint() && (OuterIter == 0)) {
-    solver[val_iZone][val_iInst][MESH_0][FLOW_SOL]->SetInitialCondition(
+    /*--- Set the initial condition for FSI problems with subiterations ---*/
+    /*--- This is done only in the first block subiteration.---*/
+    /*--- From then on, the solver reuses the partially converged solution obtained in the previous subiteration ---*/
+    
+    if (fsi && !config[val_iZone]->GetDiscrete_Adjoint() && (OuterIter == 0))
+    {
+        solver[val_iZone][val_iInst][MESH_0][FLOW_SOL]->SetInitialCondition(
         geometry[val_iZone][val_iInst], solver[val_iZone][val_iInst], config[val_iZone], TimeIter);
-  }
+    }
 
-  /*--- Apply a Wind Gust ---*/
+    /*--- Apply a Wind Gust ---*/
 
-  if (config[val_iZone]->GetWind_Gust()) {
-    SetWind_GustField(config[val_iZone], geometry[val_iZone][val_iInst], solver[val_iZone][val_iInst]);
+    if (config[val_iZone]->GetWind_Gust()) 
+    {
+      SetWind_GustField(config[val_iZone], geometry[val_iZone][val_iInst], solver[val_iZone][val_iInst]);
+    }
   }
-}
 
 void CFluidIteration::Iterate(COutput* output, CIntegration**** integration, CGeometry**** geometry,
                               CSolver***** solver, CNumerics****** numerics, CConfig** config,

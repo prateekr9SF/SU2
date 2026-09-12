@@ -193,7 +193,7 @@ void CStaticMDODriver::StartSolver()
 
       /* All equillibrium output is safely written. 
          Perturb AoA on the fixed deformed mesh */
-      const su2double dAoA = 0.01;
+      const su2double dAoA = 1.0;
       su2double AoA_pert = AoA_base + dAoA;
 
      if (rank == MASTER_NODE)
@@ -209,6 +209,15 @@ void CStaticMDODriver::StartSolver()
 
       // Apply AoA perturbation 
       config_container[ZONE_0]->SetAoA(AoA_pert);
+
+      solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL]->UpdateFarfieldVelocity(config_container[ZONE_0]);
+
+    if (rank == MASTER_NODE)
+    {
+      std::cout << "Updated AoA = "
+              << config_container[ZONE_0]->GetAoA()
+              << " deg" << std::endl;
+    }
 
       // Do not allow the CL driver to modify AoA
       //config_container[ZONE_0]->Set_CL_Driver_Mode(false);
@@ -237,6 +246,21 @@ void CStaticMDODriver::StartSolver()
         std::cout << "CL(alpha+dAoA)  = " << CL_pert << std::endl;
         std::cout << "dCL/dAoA        = " << dCL_dAoA
                   << " 1/deg" << std::endl;
+        
+        FILE *fp = fopen("dCL_dAoA.csv", "w");
+
+        if (fp != NULL)
+        {
+          fprintf(fp, "AoA_base,dAoA,CL_base,CL_pert,dCL_dAoA\n");
+          fprintf(fp, "%.10f,%.10f,%.10f,%.10f,%.10f\n",
+                AoA_base,
+                dAoA,
+                CL_base,
+                CL_pert,
+                dCL_dAoA);
+
+          fclose(fp);
+        }
       }
 
       break;
