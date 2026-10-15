@@ -44,6 +44,15 @@ protected:
   Prandtl_Lam = 0.0,    /*!< \brief Laminar Prandtl number. */
   Prandtl_Turb = 0.0;   /*!< \brief Turbulent Prandtl number. */
 
+  // ADDITIONS FOR CL-AOA SOLVER
+  su2double
+  AoA_lower_bound = -999.0,
+  CL_lower_bound  = -999.0,
+  AoA_upper_bound =  999.0,
+  CL_upper_bound  =  999.0;
+  // CL_prev_update  =  0.0,
+  // AoA_prev_update =  0.0;
+
   su2double AllBound_CEquivArea_Inv=0.0; /*!< \brief equivalent area coefficient (inviscid contribution) for all the boundaries. */
   vector<su2double> CEquivArea_Mnt;      /*!< \brief Equivalent area (inviscid contribution) for each boundary. */
   vector<su2double> CEquivArea_Inv;      /*!< \brief Equivalent area (inviscid contribution) for each boundary. */
