@@ -612,6 +612,9 @@ class COptionDVParam : public COptionBase {
         case FFD_ROTATION:
           nParamDV[iDV] = 7;
           break;
+        case FFD_TAIL_DEFLECTION:
+          nParamDV[iDV] = 7;
+          break;
         case FFD_CONTROL_SURFACE:
           nParamDV[iDV] = 7;
           break;
@@ -678,6 +681,7 @@ class COptionDVParam : public COptionBase {
              (this->design_variable[iDV] == FFD_THICKNESS_2D) || (this->design_variable[iDV] == FFD_CONTROL_POINT) ||
              (this->design_variable[iDV] == FFD_NACELLE) || (this->design_variable[iDV] == FFD_GULL) ||
              (this->design_variable[iDV] == FFD_TWIST) || (this->design_variable[iDV] == FFD_ROTATION) ||
+             (this->design_variable[iDV] == FFD_TAIL_DEFLECTION) ||
              (this->design_variable[iDV] == FFD_CONTROL_SURFACE) || (this->design_variable[iDV] == FFD_CAMBER) ||
              (this->design_variable[iDV] == FFD_THICKNESS) || (this->design_variable[iDV] == FFD_TAPER))) {
           ss >> this->FFDTag[iDV];

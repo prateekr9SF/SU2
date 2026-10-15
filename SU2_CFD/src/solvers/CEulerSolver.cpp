@@ -4668,6 +4668,148 @@ bool CEulerSolver::FixedCL_Convergence(CConfig* config, bool convergence) {
 
 }
 
+// bool CEulerSolver::FixedCL_Convergence(CConfig* config, bool convergence) {
+//   const su2double Target_CL = config->GetTarget_CL();
+//   const auto curr_iter = config->GetInnerIter();
+//   const auto Iter_dCL_dAlpha = config->GetIter_dCL_dAlpha();
+  
+//   bool fixed_cl_conv = false;
+//   AoA_inc = 0.0;
+
+//   if (!Start_AoA_FD) {
+      
+//     // 1. STANDARD CONVERGENCE CHECK
+//     if (fabs(TotalCoeff.CL - Target_CL) < (config->GetCauchy_Eps() / 2.0)) {
+//       if (Iter_dCL_dAlpha == 0) {
+//         fixed_cl_conv = true;
+//         return fixed_cl_conv;
+//       }
+//       Iter_Update_AoA = curr_iter;
+//       Start_AoA_FD = true;
+//       fixed_cl_conv = false;
+//       AoA_inc = 0.001;
+//       return fixed_cl_conv;
+//     }
+
+//     // Determine if we should trigger an AoA update:
+//     // - Option A: Iteration limit is reached.
+//     // - Option B: Flow solver converged, CL is not at target, and minimum startup iterations have passed.
+//     bool trigger_update = false;
+//     if ((curr_iter - Iter_Update_AoA) >= config->GetUpdate_AoA_Iter_Limit()) {
+//       trigger_update = true;
+//     } else if (convergence && ((curr_iter - Iter_Update_AoA) > config->GetStartConv_Iter())) {
+//       trigger_update = true;
+//     }
+
+//     // 2. TRIGGER UPDATE
+//     if (trigger_update) {
+//       Iter_Update_AoA = curr_iter;
+//       fixed_cl_conv = false;
+
+//       su2double current_CL  = TotalCoeff.CL; 
+//       su2double current_AoA = config->GetAoA();
+//       su2double target_CL   = Target_CL;
+
+//       // 3. UNCONDITIONAL BRACKET UPDATE
+//       // We must always update the bound to prevent solver stagnation (1e-8 steps)
+//       if (current_CL < target_CL) {
+//           AoA_lower_bound = current_AoA;
+//           CL_lower_bound  = current_CL;
+//       } else {
+//           AoA_upper_bound = current_AoA;
+//           CL_upper_bound  = current_CL;
+//       }
+
+//       // 4. STALL INVERSION CHECK
+//       // If the curve goes down instead of up, wipe the brackets to back out safely.
+//       if (AoA_lower_bound > -990.0 && AoA_upper_bound < 990.0) {
+//           if (AoA_upper_bound <= AoA_lower_bound) {
+//               AoA_lower_bound = -999.0; CL_lower_bound = -999.0;
+//               AoA_upper_bound =  999.0; CL_upper_bound =  999.0;
+//           }
+//       }
+
+//       bool is_bracketed = (AoA_lower_bound > -990.0 && AoA_upper_bound < 990.0);
+
+//       // 5. BRANCH: ORIGINAL LOGIC vs BRACKETED LOGIC
+//       if (!is_bracketed) {
+          
+//           // EXACT ORIGINAL SU2 LOGIC
+//           AoA_inc = (1.0 / dCL_dAlpha) * (target_CL - current_CL);
+          
+//           // MANDATORY LIMITER: Prevent 1.3+ degree shock-stalls before bounds are found
+//           if (AoA_inc > 0.3)  AoA_inc = 0.3;
+//           if (AoA_inc < -0.3) AoA_inc = -0.3;
+          
+//       } else {
+          
+//           // BRACKETED LOGIC: Hybrid False-Position + Bisection Method
+//           su2double bisection_AoA = 0.5 * (AoA_lower_bound + AoA_upper_bound);
+//           su2double next_AoA = bisection_AoA; 
+
+//           su2double cl_diff = CL_upper_bound - CL_lower_bound;
+          
+//           // Blend secant and bisection 50/50 to guarantee convergence without stalling
+//           if (fabs(cl_diff) > config->GetCauchy_Eps()) {
+//               su2double secant_AoA = AoA_lower_bound + (target_CL - CL_lower_bound) * (AoA_upper_bound - AoA_lower_bound) / cl_diff;
+//               next_AoA = 0.5 * (bisection_AoA + secant_AoA);
+//           }
+
+//           su2double calculated_inc = next_AoA - current_AoA;
+          
+//           // Shrink maximum allowable step dynamically as brackets tighten
+//           su2double bracket_width = fabs(AoA_upper_bound - AoA_lower_bound);
+//           su2double max_bracket_step = 0.20 * bracket_width;
+//           if (max_bracket_step < 0.002) max_bracket_step = 0.002; // Prevents microscopic limits
+          
+//           if (calculated_inc > max_bracket_step)  calculated_inc = max_bracket_step;
+//           if (calculated_inc < -max_bracket_step) calculated_inc = -max_bracket_step;
+          
+//           // Absolute safety net: It is mathematically impossible to step outside the bracket
+//           if (current_AoA + calculated_inc >= AoA_upper_bound) calculated_inc = 0.5 * (AoA_upper_bound - current_AoA);
+//           if (current_AoA + calculated_inc <= AoA_lower_bound) calculated_inc = 0.5 * (AoA_lower_bound - current_AoA);
+          
+//           AoA_inc = calculated_inc;
+//       }
+//     }
+
+//     // --- If the total iteration limit is reached, start finite differencing --- 
+//     if (curr_iter == config->GetnInner_Iter() - Iter_dCL_dAlpha) {
+//       if (Iter_dCL_dAlpha == 0) {
+//         End_AoA_FD = true;
+//       }
+//       Iter_Update_AoA = curr_iter;
+//       Start_AoA_FD = true;
+//       fixed_cl_conv = false;
+//       AoA_inc = 0.001;
+//     }
+//   }
+
+//   // --- If Finite Difference Mode has ended, end simulation ---
+//   if (End_AoA_FD) {
+//     return true;
+//   }
+
+//   // --- If starting Finite Difference Mode ---
+//   if (Start_AoA_FD) {
+//     config->SetHistory_Wrt_Freq(2, 0);
+
+//     End_AoA_FD = ((curr_iter - Iter_Update_AoA - 2) == Iter_dCL_dAlpha ||
+//       curr_iter == config->GetnInner_Iter() - 2 );
+
+//     if (convergence && (curr_iter - Iter_Update_AoA) > config->GetStartConv_Iter()) {
+//       End_AoA_FD = true;
+//     }
+
+//     if (End_AoA_FD) {
+//       SetCoefficient_Gradients(config);
+//       config->SetAoA(AoA_Prev);
+//     }
+//   }
+
+//   return fixed_cl_conv;
+// }
+
 void CEulerSolver::SetCoefficient_Gradients(CConfig *config) const{
 
   const su2double AoA = config->GetAoA();

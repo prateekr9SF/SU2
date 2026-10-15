@@ -27,6 +27,7 @@
 
 #pragma once
 
+
 #include "./parallelization/mpi_structure.hpp"
 
 #include <iostream>
@@ -2156,6 +2157,7 @@ enum ENUM_PARAM {
   FFD_THICKNESS_2D = 21,      /*!< \brief Free form deformation for 3D design (thickness change). */
   FFD_CONTROL_SURFACE = 23,   /*!< \brief Free form deformation for 3D design (control surface). */
   FFD_ANGLE_OF_ATTACK = 24,   /*!< \brief Angle of attack for FFD problem. */
+  FFD_TAIL_DEFLECTION = 25,   /*!< \brief Smooth Tail rotation FFD problem. */
   HICKS_HENNE = 30,           /*!< \brief Hicks-Henne bump function for airfoil deformation. */
   PARABOLIC = 31,             /*!< \brief Parabolic airfoil definition as design variables. */
   NACA_4DIGITS = 32,          /*!< \brief The four digits NACA airfoil family as design variables. */
@@ -2188,6 +2190,7 @@ static const MapType<std::string, ENUM_PARAM> Param_Map = {
   MakePair("SCALE", SCALE)
   MakePair("FFD_CONTROL_POINT", FFD_CONTROL_POINT)
   MakePair("FFD_ROTATION", FFD_ROTATION)
+  MakePair("FFD_TAIL_DEFLECTION", FFD_TAIL_DEFLECTION)
   MakePair("FFD_CONTROL_SURFACE", FFD_CONTROL_SURFACE)
   MakePair("FFD_NACELLE", FFD_NACELLE)
   MakePair("FFD_GULL", FFD_GULL)
@@ -2684,3 +2687,5 @@ public:
 #ifdef ENABLE_MAPS
 #include "option_structure.inl"
 #endif
+
+

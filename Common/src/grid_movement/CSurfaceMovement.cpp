@@ -188,6 +188,7 @@ vector<vector<su2double> > CSurfaceMovement::SetSurface_Deformation(CGeometry* g
       (config->GetDesign_Variable(0) == FFD_THICKNESS_2D) || (config->GetDesign_Variable(0) == FFD_CONTROL_POINT) ||
       (config->GetDesign_Variable(0) == FFD_NACELLE) || (config->GetDesign_Variable(0) == FFD_GULL) ||
       (config->GetDesign_Variable(0) == FFD_TWIST) || (config->GetDesign_Variable(0) == FFD_ROTATION) ||
+      (config->GetDesign_Variable(0) == FFD_TAIL_DEFLECTION) ||
       (config->GetDesign_Variable(0) == FFD_CONTROL_SURFACE) || (config->GetDesign_Variable(0) == FFD_CAMBER) ||
       (config->GetDesign_Variable(0) == FFD_THICKNESS) || (config->GetDesign_Variable(0) == FFD_ANGLE_OF_ATTACK) ||
       (config->GetDesign_Variable(0) == FFD_TAPER))
@@ -1756,6 +1757,9 @@ void CSurfaceMovement::ApplyDesignVariables(CGeometry* geometry, CConfig* config
       }
       case FFD_ROTATION:
         SetFFDRotation(geometry, config, FFDBox[iFFDBox], FFDBox, iDV, false);
+        break;
+      case FFD_TAIL_DEFLECTION:
+        SetFFDTailDeflection(geometry, config, FFDBox[iFFDBox], FFDBox, iDV, false);
         break;
       case FFD_CONTROL_SURFACE:
         SetFFDControl_Surface(geometry, config, FFDBox[iFFDBox], FFDBox, iDV, false);
@@ -3717,6 +3721,300 @@ bool CSurfaceMovement::SetFFDControl_Surface(CGeometry* geometry, CConfig* confi
           FFDBox->SetControlPoints(index, movement);
         }
   } else {
+    return false;
+  }
+
+  return true;
+}
+
+//ADDED THIS
+// bool CSurfaceMovement::SetFFDTailDeflection(CGeometry* geometry, CConfig* config, CFreeFormDefBox* FFDBox,
+//                                             CFreeFormDefBox** ResetFFDBox, unsigned short iDV, bool ResetDef) const {
+//   unsigned short iOrder, jOrder, kOrder;
+
+//   if (rank == MASTER_NODE)
+//   {
+//     std::cout << "Calling SetFFDTailDeflection" << std::endl;
+//   }
+//   su2double movement[3] = {0.0, 0.0, 0.0}, x, y, z;
+//   unsigned short index[3], iFFDBox;
+//   string design_FFDBox;
+//   su2double Scale = config->GetOpt_RelaxFactor();
+
+//   /*--- Set control points to its original value (even if the
+//    design variable is not in this box) ---*/
+
+//   if (ResetDef) {
+//     for (iFFDBox = 0; iFFDBox < nFFDBox; iFFDBox++) ResetFFDBox[iFFDBox]->SetOriginalControlPoints();
+//   }
+
+//   design_FFDBox = config->GetFFDTag(iDV);
+
+//   if (design_FFDBox.compare(FFDBox->GetTag()) == 0) {
+    
+//     /*--- xyz-coordinate of unit normal direction. ---*/
+//     su2double u = config->GetParamDV(iDV, 4);
+//     su2double v = config->GetParamDV(iDV, 5);
+//     su2double w = config->GetParamDV(iDV, 6);
+
+//     if (rank == MASTER_NODE)
+//     {
+//       std::cout << "Unit normal direction (u,v,w): " <<"  "<< u <<"  "<< v <<" "<< w << std::endl;
+//     }
+
+//     /*--- Find the bounding length of the FFD box along iOrder directly via indices for AD ---*/
+//     /* This allows the box to be arbitrarily oriented in 3D space */
+//     su2double* p_min = FFDBox->GetCoordControlPoints(0, 0, 0);
+//     su2double min_x = p_min[0], min_y = p_min[1], min_z = p_min[2];
+
+//     su2double* p_max = FFDBox->GetCoordControlPoints(FFDBox->GetlOrder() - 1, 0, 0);
+//     su2double max_x = p_max[0], max_y = p_max[1], max_z = p_max[2];
+    
+//     su2double delta_x = max_x - min_x;
+//     su2double delta_y = max_y - min_y;
+//     su2double delta_z = max_z - min_z;
+
+//     su2double box_length = sqrt(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z);
+
+    
+
+//     /*--- The angle of rotation. ---*/
+//     su2double theta = config->GetDV_Value(iDV) * 1 * PI_NUMBER / 180.0;
+
+//     /*--- Calculate tan(theta) using the specified variables ---*/
+//     su2double cosT = cos(theta);
+//     su2double sinT = sin(theta);
+//     su2double tanT = sinT / cosT;
+
+//     /*--- Calculate the maximum displacement magnitude ---*/
+//     su2double max_disp = box_length * tanT;
+    
+//     if (rank == MASTER_NODE)
+//     {
+//       std::cout << "Tail deflection angle (deg): " << config->GetDV_Value(iDV) << std::endl;
+//       std::cout << "Calculated base displacement magnitude: " << max_disp << std::endl;
+//     }
+
+//     /*--- Number of FFD points along the spanwise (Y) axis ---*/
+//     int n_span = FFDBox->GetmOrder();
+
+//     /*--- Change the value of the control point ---*/
+//     /* Iterate over all control points in the FFD box using nested loops over iOrder,
+//         jOrder, kOrder */
+//     for (iOrder = 0; iOrder < FFDBox->GetlOrder(); iOrder++) {
+//       for (jOrder = 0; jOrder < FFDBox->GetmOrder(); jOrder++) {
+//         for (kOrder = 0; kOrder < FFDBox->GetnOrder(); kOrder++) {
+//           index[0] = iOrder;
+//           index[1] = jOrder;
+//           index[2] = kOrder;
+//           su2double* coord = FFDBox->GetCoordControlPoints(iOrder, jOrder, kOrder);
+//           x = coord[0];
+//           y = coord[1];
+//           z = coord[2];
+
+//           /* X, Y, and Z movements default to 0.0 for AD safety */
+
+//           /*--- ONLY apply displacement to the highest i index ---*/
+//           if (iOrder == (FFDBox->GetlOrder() - 1)) {
+            
+//             su2double current_disp = 0.0;
+
+//             /*--- Taper the displacement at BOTH ends of the span ---*/
+//             if (jOrder == 0 || jOrder == n_span - 1) {
+//               /* The first and last points in the spanwise direction */
+//               current_disp = 0.0;
+//             } else if (jOrder == 1 || jOrder == n_span - 2) {
+//               /* The second and second-to-last points */
+//               current_disp = max_disp / 2.0;
+//             } else {
+//               /* All inner points */
+//               current_disp = max_disp;
+//             }
+
+//             /*--- Displace points along the unit normal direction ---*/
+//             movement[0] = current_disp * u;
+//             movement[1] = current_disp * v;
+//             movement[2] = current_disp * w;
+//           }
+
+//           if (rank == MASTER_NODE)
+//           {
+//             std::cout <<"\n";
+//             std::cout << "Current FFD control point index: " << iOrder <<" "<< jOrder <<" "<< kOrder << std::endl;
+//             std::cout << "Current FFD control point coo (x, y, z): " << x <<" "<< y <<" "<< z << std::endl;
+//             std::cout << "Current FFD control point movement (x, y, z): " << movement[0] <<" "<< movement[1] <<" "<< movement[2] << std::endl;
+//             std::cout <<"\n";
+//           }
+
+//           /* Update the coordinate of the FFD control point */
+//           FFDBox->SetControlPoints(index, movement);
+//         }
+//       }
+//     }
+//   } 
+//   else 
+//   {
+//     return false;
+//   }
+
+//   return true;
+// }
+
+bool CSurfaceMovement::SetFFDTailDeflection(CGeometry* geometry, CConfig* config, CFreeFormDefBox* FFDBox,
+                                            CFreeFormDefBox** ResetFFDBox, unsigned short iDV, bool ResetDef) const {
+  unsigned short iOrder, jOrder, kOrder;
+
+  if (rank == MASTER_NODE)
+  {
+    std::cout << "Calling SetFFDTailDeflection" << std::endl;
+  }
+  su2double movement[3] = {0.0, 0.0, 0.0}, x, y, z;
+  unsigned short index[3], iFFDBox;
+  string design_FFDBox;
+  su2double Scale = config->GetOpt_RelaxFactor();
+
+  /*--- Set control points to its original value (even if the
+   design variable is not in this box) ---*/
+
+  if (ResetDef) {
+    for (iFFDBox = 0; iFFDBox < nFFDBox; iFFDBox++) ResetFFDBox[iFFDBox]->SetOriginalControlPoints();
+  }
+
+  design_FFDBox = config->GetFFDTag(iDV);
+
+  if (design_FFDBox.compare(FFDBox->GetTag()) == 0) {
+    
+    /*--- Get the tapering option directly as an su2double (NO CASTING) ---*/
+    su2double taper_option = config->GetParamDV(iDV, 1);
+
+    /*--- xyz-coordinate of unit normal direction. ---*/
+    su2double u = config->GetParamDV(iDV, 4);
+    su2double v = config->GetParamDV(iDV, 5);
+    su2double w = config->GetParamDV(iDV, 6);
+
+    if (rank == MASTER_NODE)
+    {
+      std::cout << "Unit normal direction (u,v,w): " <<"  "<< u <<"  "<< v <<" "<< w << std::endl;
+      std::cout << "Taper Option: " << taper_option << std::endl;
+    }
+
+    /*--- Find the bounding length of the FFD box along iOrder directly via indices for AD ---*/
+    /* This allows the box to be arbitrarily oriented in 3D space */
+    su2double* p_min = FFDBox->GetCoordControlPoints(0, 0, 0);
+    su2double min_x = p_min[0], min_y = p_min[1], min_z = p_min[2];
+
+    su2double* p_max = FFDBox->GetCoordControlPoints(FFDBox->GetlOrder() - 1, 0, 0);
+    su2double max_x = p_max[0], max_y = p_max[1], max_z = p_max[2];
+    
+    su2double delta_x = max_x - min_x;
+    su2double delta_y = max_y - min_y;
+    su2double delta_z = max_z - min_z;
+
+    su2double box_length = sqrt(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z);
+
+    
+
+    /*--- The angle of rotation. ---*/
+    su2double theta = config->GetDV_Value(iDV) * 1 * PI_NUMBER / 180.0;
+
+    /*--- Calculate tan(theta) using the specified variables ---*/
+    su2double cosT = cos(theta);
+    su2double sinT = sin(theta);
+    su2double tanT = sinT / cosT;
+
+    /*--- Calculate the maximum displacement magnitude ---*/
+    su2double max_disp = box_length * tanT;
+    
+    if (rank == MASTER_NODE)
+    {
+      std::cout << "Tail deflection angle (deg): " << config->GetDV_Value(iDV) << std::endl;
+      std::cout << "Calculated base displacement magnitude: " << max_disp << std::endl;
+    }
+
+    /*--- Number of FFD points along the spanwise (Y) axis ---*/
+    int n_span = FFDBox->GetmOrder();
+
+    /*--- Change the value of the control point ---*/
+    /* Iterate over all control points in the FFD box using nested loops over iOrder,
+        jOrder, kOrder */
+    for (iOrder = 0; iOrder < FFDBox->GetlOrder(); iOrder++) {
+      for (jOrder = 0; jOrder < FFDBox->GetmOrder(); jOrder++) {
+        for (kOrder = 0; kOrder < FFDBox->GetnOrder(); kOrder++) {
+          index[0] = iOrder;
+          index[1] = jOrder;
+          index[2] = kOrder;
+          su2double* coord = FFDBox->GetCoordControlPoints(iOrder, jOrder, kOrder);
+          x = coord[0];
+          y = coord[1];
+          z = coord[2];
+
+          /* X, Y, and Z movements default to 0.0 for AD safety */
+          movement[0] = 0.0;
+          movement[1] = 0.0;
+          movement[2] = 0.0;
+
+          /*--- ONLY apply displacement to the highest i index ---*/
+          if (iOrder == (FFDBox->GetlOrder() - 1)) {
+            
+            su2double current_disp = 0.0;
+
+            /*--- Apply Tapering Logic Based on taper_option (using 0.0 and -1.0) ---*/
+            if (taper_option == 0.0) {
+              /* Taper the displacement at BOTH ends of the span */
+              if (jOrder == 0 || jOrder == n_span - 1) {
+                /* The first and last points in the spanwise direction */
+                current_disp = 0.0;
+              } else if (jOrder == 1 || jOrder == n_span - 2) {
+                /* The second and second-to-last points */
+                current_disp = max_disp / 2.0;
+              } else {
+                /* All inner points */
+                current_disp = max_disp;
+              }
+            } 
+            else if (taper_option == -1.0) {
+              /* Taper ONLY at the higher y-limit (high jOrder). 
+                 Lower y-points (low jOrder) do a full deflection. */
+              if (jOrder == n_span - 1) {
+                current_disp = 0.0;
+              } else if (jOrder == n_span - 2) {
+                current_disp = max_disp / 2.0;
+              } else {
+                current_disp = max_disp;
+              }
+            } 
+            else {
+              /* Fallback: Print an error and default to full max_disp */
+              if (rank == MASTER_NODE) {
+                std::cout << "ERROR: Invalid taper_option (" << taper_option 
+                          << ") set in DV param 1. Defaulting to full displacement." << std::endl;
+              }
+              current_disp = max_disp;
+            }
+
+            /*--- Displace points along the unit normal direction ---*/
+            movement[0] = current_disp * u;
+            movement[1] = current_disp * v;
+            movement[2] = current_disp * w;
+          }
+
+          if (rank == MASTER_NODE)
+          {
+            std::cout <<"\n";
+            std::cout << "Current FFD control point index: " << iOrder <<" "<< jOrder <<" "<< kOrder << std::endl;
+            std::cout << "Current FFD control point coo (x, y, z): " << x <<" "<< y <<" "<< z << std::endl;
+            std::cout << "Current FFD control point movement (x, y, z): " << movement[0] <<" "<< movement[1] <<" "<< movement[2] << std::endl;
+            std::cout <<"\n";
+          }
+
+          /* Update the coordinate of the FFD control point */
+          FFDBox->SetControlPoints(index, movement);
+        }
+      }
+    }
+  } 
+  else 
+  {
     return false;
   }
 
