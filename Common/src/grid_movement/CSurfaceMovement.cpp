@@ -1690,6 +1690,11 @@ void CSurfaceMovement::ApplyDesignVariables(CGeometry* geometry, CConfig* config
   for (iDV = 0; iDV < config->GetnDV(); iDV++) 
   {
 
+    if (rank == MASTER_NODE)
+    {
+      std::cout << "Current DV TYPE: "<< config->GetDesign_Variable(iDV) << std::endl;
+    }
+
     switch (config->GetDesign_Variable(iDV)) 
     {
       
@@ -1769,6 +1774,10 @@ void CSurfaceMovement::ApplyDesignVariables(CGeometry* geometry, CConfig* config
         SetFFDAngleOfAttack(geometry, config, FFDBox[iFFDBox], FFDBox, iDV, false);
         break;
       case FFD_TAPER:
+        if (rank == MASTER_NODE)
+        {
+          std::cout << "Calling SetFFDTaper \n";
+        }
         SetFFDTaper(geometry, config, FFDBox[iFFDBox], FFDBox, iDV, false);
         break;  
     }
@@ -3201,17 +3210,22 @@ bool CSurfaceMovement::SetFFDTaper(CGeometry* geometry, CConfig* config, CFreeFo
         index[1] = SU2_TYPE::Int(config->GetParamDV(iDV, 2));
         index[2] = kIndex;
         
-        
+        if (rank == MASTER_NODE)
+        {
+          std::cout << "Index[0]" << index[0] << " Index[1]" << index[1] << " Index[2]" << index[2] << std::endl; 
+
+          std::cout << "Current amplitude: " << Ampl << std::endl;
+        }
 
 
         movement[1] = 0.0;
         movement[2] = 0.0;
         // Apply the same deformation amplitude across the Y plane (top and bottom control points)
         if (kIndex == 0)
-          // THis is the leading edge
+          // Bottom control point
           movement[0] = Ampl;
         else
-          // This is the trailing edge
+          // Top control point
           movement[0] = Ampl;
 
         FFDBox->SetControlPoints(index, movement);

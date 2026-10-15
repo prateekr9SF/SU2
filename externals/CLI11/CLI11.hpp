@@ -1,4 +1,7 @@
+#include <vector>
+#include <cstdint>
 #pragma once
+
 
 // CLI11: Version 1.8.0
 // Originally designed by Henry Schreiner
