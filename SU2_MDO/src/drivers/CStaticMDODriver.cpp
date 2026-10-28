@@ -32,6 +32,9 @@
 
 #include "../../include/coupling/precice.hpp"
 
+#include <sstream>
+#include <iomanip>
+
 
 
 CStaticMDODriver::CStaticMDODriver(char* confFile,
@@ -158,6 +161,31 @@ void CStaticMDODriver::StartSolver()
     Monitor(TimeIter);
 
 
+    /*--- Write surface flow after every implicit FSI iteration ---*/
+    if (enable_Steady_MDO && TimeIter == target_time)
+    {
+      std::ostringstream filename;
+
+      filename << "surface_flow_FSI_"
+             << std::setw(4) << std::setfill('0')
+             << counter << ".vtu";
+
+      /*--- Load current CFD solution into output data sorters ---*/
+      output_container[ZONE_0]->LoadData(geometry_container[ZONE_0][INST_0][MESH_0],config_container[ZONE_0],solver_container[ZONE_0][INST_0][MESH_0]);
+
+      /*--- Write only the surface ParaView XML file ---*/
+      output_container[ZONE_0]->WriteToFile(config_container[ZONE_0],geometry_container[ZONE_0][INST_0][MESH_0],OUTPUT_TYPE::SURFACE_PARAVIEW_XML,filename.str());
+
+      if (rank == MASTER_NODE)
+      {
+        std::cout << "Wrote FSI surface output: "<< filename.str() << std::endl;
+      }
+    }
+
+
+
+
+
     /*---Output the required fields to files---*/
     if (!(precice->isCouplingOngoing()))
     {
@@ -172,6 +200,9 @@ void CStaticMDODriver::StartSolver()
 
       // Save CL at aeroeasltic state
       su2double CL_base = solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL] ->GetTotal_CL();
+
+      // Save CD at aeroeasltic state
+      su2double CD_base = solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL]->GetTotal_CD();
 
       // Write converged aeroelastic output
       Output(TimeIter);
@@ -237,27 +268,32 @@ void CStaticMDODriver::StartSolver()
       // Obtain perturbed CL and calculate derivative
       su2double CL_pert = solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL] ->GetTotal_CL();
 
+      su2double CD_pert = solver_container[ZONE_0][INST_0][MESH_0][FLOW_SOL] ->GetTotal_CD();
+
       su2double dCL_dAoA = (CL_pert - CL_base) / dAoA;
+      su2double dCD_dAoA = (CD_pert - CD_base) / dAoA;
 
       if (rank == MASTER_NODE)
       {
-        std::cout << std::endl;
-        std::cout << "CL(alpha)       = " << CL_base << std::endl;
-        std::cout << "CL(alpha+dAoA)  = " << CL_pert << std::endl;
-        std::cout << "dCL/dAoA        = " << dCL_dAoA
-                  << " 1/deg" << std::endl;
-        
-        FILE *fp = fopen("dCL_dAoA.csv", "w");
+        FILE *fp = fopen("aero_derivatives.csv", "w");
 
         if (fp != NULL)
         {
-          fprintf(fp, "AoA_base,dAoA,CL_base,CL_pert,dCL_dAoA\n");
-          fprintf(fp, "%.10f,%.10f,%.10f,%.10f,%.10f\n",
+          fprintf(fp,
+                "AoA_base,dAoA,CL_base,CL_pert,dCL_dAoA,"
+                "CD_base,CD_pert,dCD_dAoA\n");
+
+          fprintf(fp,
+                "%.10f,%.10f,%.10f,%.10f,%.10f,"
+                "%.10f,%.10f,%.10f\n",
                 AoA_base,
                 dAoA,
                 CL_base,
                 CL_pert,
-                dCL_dAoA);
+                dCL_dAoA,
+                CD_base,
+                CD_pert,
+                dCD_dAoA);
 
           fclose(fp);
         }
