@@ -1826,495 +1826,1400 @@ void CSurfaceMovement::ComputeBestFitPlaneNormal(const su2double* x_vals, const 
   }
 }
 
-
-su2double** CSurfaceMovement::getNormalVector(CGeometry* geometry, CConfig* config, CFreeFormDefBox* FFDBox, unsigned short iFFDBox, int& N_out) 
+su2double** CSurfaceMovement::getNormalVector(
+    CGeometry* geometry,
+    CConfig* config,
+    CFreeFormDefBox* FFDBox,
+    unsigned short iFFDBox,
+    int& N_out)
 {
+    // =========================================================
+    // Compute local tangent and normal vectors along the
+    // quarter-chord reference line of the wing.
+    //
+    // The quarter-chord coordinates are obtained from
+    // chord_array_, which must have been populated by
+    // getRotationPoint() prior to calling this function.
+    //
+    // Since chord_array_ has already been broadcast to all
+    // MPI ranks, each rank independently computes identical
+    // tangent and normal vectors.
+    //
+    // No additional MPI communication is required.
+    // =========================================================
 
- // Allocate memory for local coordinates
- su2double* X_local = new su2double[MAX_POINTS];
- su2double* Y_local = new su2double[MAX_POINTS];
- su2double* Z_local = new su2double[MAX_POINTS];
+    // Retain the original function signature for compatibility.
+    // These arguments are no longer required in this routine.
+    (void)geometry;
+    (void)config;
+    (void)iFFDBox;
 
- int N_local = 0; // Number of local points
+    // Number of available quarter-chord stations.
+    const int M = static_cast<int>(chord_array_.size());
 
- // Extract surface coordinates from the wing marker
- for (int i = 0; i < config->GetnMarker_All(); i++) 
-  {
-    if (config->GetMarker_All_TagBound(i) == "wing") 
-      {
-        unsigned short nDim = geometry->GetnDim();
-        for (unsigned long iVertex = 0; iVertex < geometry->GetnVertex(i); iVertex++) 
-          {
-            unsigned long iPoint = geometry->vertex[i][iVertex]->GetNode();
-            su2double x = geometry->nodes->GetCoord(iPoint, 0);
-            su2double y = geometry->nodes->GetCoord(iPoint, 1);
-            su2double z = geometry->nodes->GetCoord(iPoint, 2);
-            if (N_local >= MAX_POINTS) break;
-            X_local[N_local] = x;
-            Y_local[N_local] = y;
-            Z_local[N_local] = z;
-            N_local++;
-          }
-      }
-  }
+    N_out = M;
 
-  // Each process writes local coordinates to surface_coords_<rank>.csv
-  std::ostringstream filename;
-  filename << "surface_coords_" << rank << ".csv";
-  std::ofstream coord_out(filename.str());
-  coord_out << "X,Y,Z\n";
-  for (int i = 0; i < N_local; ++i)
+    // =========================================================
+    // 1. Validate the quarter-chord reference line
+    // =========================================================
+
+    // At least two distinct quarter-chord stations are
+    // required to construct a tangent vector.
+
+    if (M < 2)
     {
-      coord_out << std::fixed << std::setprecision(8)
-        << X_local[i] << ","
-        << Y_local[i] << ","
-        << Z_local[i] << "\n";
-    }
-
-    coord_out.close();
-
-  // Gather the number of points from all ranks to rank 0
-  int* recv_counts = nullptr;
-  int* displs = nullptr;
-
-  if (rank == MASTER_NODE)
-  {
-    recv_counts = new int[size];
-  }
-
-  SU2_MPI::Gather(&N_local, 1, MPI_INT, recv_counts, 1, MPI_INT, 0, SU2_MPI::GetComm());
-
-  // Compute total number of points and displacements on rank 0
-  int total_points = 0;
-
-  if (rank == MASTER_NODE)
-  {
-    displs = new int[size];
-    displs[0] = 0;
-
-    for (int i = 1; i < size; ++i)
-    {
-      displs[i] = displs[i-1] + recv_counts[i-1];
-    }
-    total_points = displs[size - 1] + recv_counts[size - 1];
-  }
-
-  // Allocate global arrays for gathered coordinates on rank 0
-  su2double* X_global = nullptr;
-  su2double* Y_global = nullptr;
-  su2double* Z_global = nullptr;
-
-  if (rank == MASTER_NODE) 
-  {
-    X_global = new su2double[total_points];
-    Y_global = new su2double[total_points];
-    Z_global = new su2double[total_points];
-  }
-
-   // Gather local coordinates to rank 0
-   SU2_MPI::Gatherv(X_local, N_local, MPI_DOUBLE, X_global, recv_counts, displs, MPI_DOUBLE, 0, SU2_MPI::GetComm());
-   SU2_MPI::Gatherv(Y_local, N_local, MPI_DOUBLE, Y_global, recv_counts, displs, MPI_DOUBLE, 0, SU2_MPI::GetComm());
-   SU2_MPI::Gatherv(Z_local, N_local, MPI_DOUBLE, Z_global, recv_counts, displs, MPI_DOUBLE, 0, SU2_MPI::GetComm());
-
-  // Free local coordinate arrays on remote ranks
-  delete[] X_local;
-  delete[] Y_local;
-  delete[] Z_local;
-
-  if (rank == MASTER_NODE)
-  {
-    std::cout << "Total points collected: " << total_points << std::endl;
-  }
-
-
-  // Allocate pointer for tangent/normal array, only filled on rank 0
-  su2double** tangent_normal_array = nullptr;
-  int M = 0;
-
-
-if (rank == MASTER_NODE)
-{
-  // Use quarter-chord line from chord_array_ as the reference curve
-  M = static_cast<int>(chord_array_.size());
-
-  if (M < 2)
-  {
-    std::cerr << "WARNING: NOT ENOUGH POINTS IN chord_array_ TO COMPUTE TANGENTS "
-              << "for FFD box '" << FFDBox->GetTag() << "' (M=" << M << ")"
-              << std::endl;
-  }
-  else
-  {
-    std::cout << "Using " << M << " quarter-chord stations for tangents/normals on FFD box '"
-              << FFDBox->GetTag() << "'" << std::endl;
-  }
-
-  // Write one CSV per FFD box
-  std::ostringstream fname;
-  fname << "tangent_normals_" << FFDBox->GetTag() << ".csv";
-  std::ofstream outfile(fname.str());
-  outfile << "X,Y,Z,Tangent_X,Tangent_Y,Tangent_Z,Normal_Y,Normal_Z\n";
-
-  // Build the reference curve from quarter-chord points
-  std::vector<su2double> Xc(M), Yc(M), Zc(M);
-  for (int i = 0; i < M; ++i)
-  {
-    const su2double y_qc  = chord_array_[i][1]; // target_y
-    const su2double x_qc  = chord_array_[i][5]; // x_quarter
-    const su2double z_qc  = chord_array_[i][6]; // z_qc
-
-    Xc[i] = x_qc;
-    Yc[i] = y_qc;
-    Zc[i] = z_qc;
-  }
-
-  // Allocate tangent_normal_array on heap
-  tangent_normal_array = new su2double*[M];
-
-  // Compute tangents and normals about the quarter-chord line
-  for (int i = 0; i < M; ++i)
-  {
-    su2double tangent[3], normal[2];
-    tangent_normal_array[i] = new su2double[7]; // [index, Y, Tx, Ty, Tz, Ny, Nz]
-
-    if (M >= 2)
-    {
-      if (i == 0)
-      {
-        tangent[0] = Xc[1] - Xc[0];
-        tangent[1] = Yc[1] - Yc[0];
-        tangent[2] = Zc[1] - Zc[0];
-      }
-      else if (i == M - 1)
-      {
-        tangent[0] = Xc[M-1] - Xc[M-2];
-        tangent[1] = Yc[M-1] - Yc[M-2];
-        tangent[2] = Zc[M-1] - Zc[M-2];
-      }
-      else
-      {
-        tangent[0] = Xc[i+1] - Xc[i-1];
-        tangent[1] = Yc[i+1] - Yc[i-1];
-        tangent[2] = Zc[i+1] - Zc[i-1];
-      }
-
-      su2double len = std::sqrt(tangent[0]*tangent[0] +
-                                tangent[1]*tangent[1] +
-                                tangent[2]*tangent[2]);
-      if (len > 0.0)
-      {
-        tangent[0] /= len;
-        tangent[1] /= len;
-        tangent[2] /= len;
-      }
-    }
-    else
-    {
-      tangent[0] = tangent[1] = tangent[2] = 0.0;
-    }
-
-    // Normal in Y-Z plane, perpendicular to projection of tangent
-    su2double ty = tangent[1];
-    su2double tz = tangent[2];
-    su2double mag = std::sqrt(ty*ty + tz*tz);
-
-    if (mag > 0.0)
-    {
-      normal[0] = -tz / mag; // Normal_Y
-      normal[1] =  ty / mag; // Normal_Z
-    }
-    else
-    {
-      normal[0] = normal[1] = 0.0;
-    }
-
-    if (std::isnan(tangent[0]) || std::isnan(tangent[1]) || std::isnan(tangent[2]) ||
-        std::isnan(normal[0])  || std::isnan(normal[1]))
-    {
-      std::cout << "NaN encountered at index " << i << " on FFD box '"
-                << FFDBox->GetTag() << "'. Skipping." << std::endl;
-      continue;
-    }
-
-    // Fill the array that will be broadcast
-    tangent_normal_array[i][0] = static_cast<su2double>(i); // station index
-    tangent_normal_array[i][1] = Yc[i];                     // spanwise Y
-    tangent_normal_array[i][2] = tangent[0];                // Tx
-    tangent_normal_array[i][3] = tangent[1];                // Ty
-    tangent_normal_array[i][4] = tangent[2];                // Tz
-    tangent_normal_array[i][5] = normal[0];                 // Normal_Y
-    tangent_normal_array[i][6] = normal[1];                 // Normal_Z
-
-    // Write to CSV: point on QC line + tangent + normal
-    outfile << std::fixed << std::setprecision(6)
-            << Xc[i] << "," << Yc[i] << "," << Zc[i] << ","
-            << tangent[0] << "," << tangent[1] << "," << tangent[2] << ","
-            << normal[0]  << "," << normal[1]  << "\n";
-  }
-
-  outfile.close();
-}
-
-
-
-  // roadcast M to all ranks
-  SU2_MPI::Bcast(&M, 1, MPI_INT, 0, SU2_MPI::GetComm());
-
-  // Define flat array on all ranks 
-  su2double* flat_array = new su2double[M * 7];
-
-  if (rank == MASTER_NODE)
-  {
-    for (int i = 0 ; i < M; ++i)
-    {
-      for (int j = 0; j < 7; ++j)
-      {
-        flat_array[i * 7 + j] = tangent_normal_array[i][j];
-      }
-    }
-  }
-
-  SU2_MPI::Bcast(flat_array, M * 7, MPI_DOUBLE, 0, SU2_MPI::GetComm());
-
-  if (rank != MASTER_NODE) 
-  {
-    tangent_normal_array = new su2double*[M];
-    for (int i = 0; i < M; ++i) 
-    {
-      tangent_normal_array[i] = new su2double[7];
-      for (int j = 0; j < 7; ++j) 
-      {
-        tangent_normal_array[i][j] = flat_array[i * 7 + j];
-      }
-    }
-  }
-
-  delete[] flat_array;
-
-  if (rank == MASTER_NODE)
-  {
-    delete[] X_global;
-    delete[] Y_global;
-    delete[] Z_global;
-    delete[] recv_counts;
-    delete[] displs;  
-  }
-
-  N_out = M;
-  return tangent_normal_array;
-}
-
-void CSurfaceMovement::getRotationPoint(CGeometry* geometry, CConfig* config,
-                                        CFreeFormDefBox* FFDBox, unsigned short iFFDBox,
-                                        int& N_out)
-{
-  // Allocate memory for local coordinates
-  su2double* X_local = new su2double[MAX_POINTS];
-  su2double* Y_local = new su2double[MAX_POINTS];
-  su2double* Z_local = new su2double[MAX_POINTS];
-
-  // Number of local points
-  int N_local = 0;
-
-  // Extract surface coordinates from the wing marker across all ranks
-  for (int i = 0; i < config->GetnMarker_All(); i++)
-  {
-    if (config->GetMarker_All_TagBound(i) == "wing")
-    {
-      unsigned short nDim = geometry->GetnDim();
-      for (unsigned long iVertex = 0; iVertex < geometry->GetnVertex(i); iVertex++)
-      {
-        unsigned long iPoint = geometry->vertex[i][iVertex]->GetNode();
-        su2double x = geometry->nodes->GetCoord(iPoint, 0);
-        su2double y = geometry->nodes->GetCoord(iPoint, 1);
-        su2double z = geometry->nodes->GetCoord(iPoint, 2);
-        if (N_local >= MAX_POINTS) break;
-        X_local[N_local] = x;
-        Y_local[N_local] = y;
-        Z_local[N_local] = z;
-        N_local++;
-      }
-    }
-  }
-
-  // Gather the number of points from all ranks to rank 0
-  int* recv_counts = nullptr;
-  int* displs      = nullptr;
-
-  if (rank == MASTER_NODE)
-  {
-    recv_counts = new int[size];
-  }
-
-  SU2_MPI::Gather(&N_local, 1, MPI_INT,
-                  recv_counts, 1, MPI_INT,
-                  0, SU2_MPI::GetComm());
-
-  // Compute total number of points and displacements on rank 0
-  int total_points = 0;
-
-  if (rank == MASTER_NODE)
-  {
-    displs    = new int[size];
-    displs[0] = 0;
-
-    for (int i = 1; i < size; ++i)
-      displs[i] = displs[i - 1] + recv_counts[i - 1];
-
-    total_points = displs[size - 1] + recv_counts[size - 1];
-  }
-
-  // Allocate global arrays for gathered coordinates on rank 0
-  su2double* X_global = nullptr;
-  su2double* Y_global = nullptr;
-  su2double* Z_global = nullptr;
-
-  if (rank == MASTER_NODE)
-  {
-    X_global = new su2double[total_points];
-    Y_global = new su2double[total_points];
-    Z_global = new su2double[total_points];
-  }
-
-  // Gather local coordinates to rank 0
-  SU2_MPI::Gatherv(X_local, N_local, MPI_DOUBLE,
-                   X_global, recv_counts, displs, MPI_DOUBLE,
-                   0, SU2_MPI::GetComm());
-  SU2_MPI::Gatherv(Y_local, N_local, MPI_DOUBLE,
-                   Y_global, recv_counts, displs, MPI_DOUBLE,
-                   0, SU2_MPI::GetComm());
-  SU2_MPI::Gatherv(Z_local, N_local, MPI_DOUBLE,
-                   Z_global, recv_counts, displs, MPI_DOUBLE,
-                   0, SU2_MPI::GetComm());
-
-  // Free local coordinate arrays on remote ranks
-  delete[] X_local;
-  delete[] Y_local;
-  delete[] Z_local;
-
-  if (rank == MASTER_NODE)
-  {
-    std::cout << "Total points collected: " << total_points << std::endl;
-  }
-
-  if (rank == MASTER_NODE)
-  {
-    // Begin computing local reference line
-    su2double* Xc = new su2double[MAX_POINTS];
-    su2double* Yc = new su2double[MAX_POINTS];
-    su2double* Zc = new su2double[MAX_POINTS];
-
-    // Get the span-wise extent of the FFD bounding box
-    su2double FFD_ymin   = config->GetCoordFFDBox(iFFDBox, 1); // second coord
-    su2double FFD_ymax   = config->GetCoordFFDBox(iFFDBox, 7); // seventh coord
-    unsigned short FFD_ypoints = config->GetDegreeFFDBox(iFFDBox, 1) + 1;
-
-    std::cout << "FFD_ymin: "     << FFD_ymin     << std::endl;
-    std::cout << "FFD_ymax: "     << FFD_ymax     << std::endl;
-    std::cout << "FFD_ypoints: "  << FFD_ypoints  << std::endl;
-    std::cout << "FFD Span degree: "
-              << config->GetDegreeFFDBox(iFFDBox, 1) << std::endl;
-
-    // Slice spacing based on FFD lattice distribution
-    su2double dy = (FFD_ymax - FFD_ymin) / (FFD_ypoints - 1);
-
-    chord_array_.clear();
-    chord_array_.reserve(FFD_ypoints);
-
-    // Loop over all slice locations
-    for (int j = 0; j < FFD_ypoints; j++)
-    {
-      su2double target_y = FFD_ymin + j * dy;
-
-      // Find LE and TE in this slice and track their z
-      su2double xmin =  std::numeric_limits<double>::infinity();
-      su2double xmax = -std::numeric_limits<double>::infinity();
-      su2double z_le = 0.0;
-      su2double z_te = 0.0;
-
-      int slice_count = 0;
-
-      for (int i = 0; i < total_points; ++i)
-      {
-        if (std::abs(Y_global[i] - target_y) < 1e-1)
+        if (rank == MASTER_NODE)
         {
-          slice_count++;
-          su2double xk = X_global[i];
-          su2double zk = Z_global[i];
-
-          if (xk < xmin)
-          {
-            xmin = xk;
-            z_le = zk;
-          }
-          if (xk > xmax)
-          {
-            xmax = xk;
-            z_te = zk;
-          }
+            std::cerr
+                << "ERROR: Insufficient quarter-chord stations "
+                << "for FFD box '" << FFDBox->GetTag()
+                << "' (M = " << M << ")."
+                << std::endl;
         }
-      }
 
-      if (slice_count > 0 && xmax > xmin)
-      {
-        su2double chord     = xmax - xmin;
-        su2double x_quarter = xmin + 0.25 * chord;
-
-        // z on the straight line between (xmin, z_le) and (xmax, z_te)
-        su2double t   = (x_quarter - xmin) / chord; // = 0.25, but keep it general
-        su2double z_qc = z_le + t * (z_te - z_le);
-
-        chord_array_.push_back({
-          static_cast<su2double>(chord_array_.size() + 1), // index
-          target_y,
-          xmin,
-          xmax,
-          chord,
-          x_quarter,
-          z_qc
-        });
-      }
+        N_out = 0;
+        return nullptr;
     }
 
-    delete[] Xc;
-    delete[] Yc;
-    delete[] Zc;
-  }
+    if (rank == MASTER_NODE)
+    {
+        std::cout
+            << "Computing tangent and normal vectors using "
+            << M << " quarter-chord stations for FFD box '"
+            << FFDBox->GetTag() << "'."
+            << std::endl;
+    }
 
-  int M = chord_array_.size();
-  SU2_MPI::Bcast(&M, 1, MPI_INT, 0, SU2_MPI::GetComm());
-  std::vector<su2double> flat_array(M * 7);
+    // =========================================================
+    // 2. Extract the quarter-chord reference coordinates
+    // =========================================================
+    //
+    // Structure of chord_array_:
+    //
+    // [0] : Station index
+    // [1] : Spanwise coordinate (Y)
+    // [2] : Leading-edge coordinate (X_LE)
+    // [3] : Trailing-edge coordinate (X_TE)
+    // [4] : Projected chord length
+    // [5] : Quarter-chord coordinate (X_QC)
+    // [6] : Quarter-chord coordinate (Z_QC)
+    //
+    // The reference curve is defined by:
+    //
+    // r_i = (X_QC, Y, Z_QC)
+    // =========================================================
 
-  if (rank == MASTER_NODE)
-  {
+    std::vector<su2double> Xc(M);
+    std::vector<su2double> Yc(M);
+    std::vector<su2double> Zc(M);
+
     for (int i = 0; i < M; ++i)
-      for (int j = 0; j < 7; ++j)
-        flat_array[i * 7 + j] = chord_array_[i][j];
-  }
+    {
+        Xc[i] = chord_array_[i][5];
+        Yc[i] = chord_array_[i][1];
+        Zc[i] = chord_array_[i][6];
+    }
 
-  SU2_MPI::Bcast(flat_array.data(), flat_array.size(), MPI_DOUBLE,
-                 0, SU2_MPI::GetComm());
+    // =========================================================
+    // 3. Allocate the tangent-normal array
+    // =========================================================
+    //
+    // Preserve the original output format:
+    //
+    // [0] : Station index (zero-based)
+    // [1] : Spanwise coordinate
+    // [2] : Tangent_X
+    // [3] : Tangent_Y
+    // [4] : Tangent_Z
+    // [5] : Normal_Y
+    // [6] : Normal_Z
+    //
+    // The X component of the normal vector is implicitly zero.
+    //
+    // Memory is initialized to zero to prevent undefined
+    // behavior in the event of an invalid station.
+    // =========================================================
 
-  if (rank != MASTER_NODE)
-  {
-    chord_array_.resize(M);
+    su2double** tangent_normal_array = new su2double*[M];
+
     for (int i = 0; i < M; ++i)
-      for (int j = 0; j < 7; ++j)
-        chord_array_[i][j] = flat_array[i * 7 + j];
-  }
+    {
+        tangent_normal_array[i] = new su2double[7]();
+    }
 
-  if (rank == MASTER_NODE)
-  {
-    delete[] X_global;
-    delete[] Y_global;
-    delete[] Z_global;
-    delete[] recv_counts;
-    delete[] displs;
-  }
+    // Numerical tolerance for detecting degenerate vectors.
+    const su2double EPS = 1.0e-12;
 
-  // Set N_out (number of slices) to M
-  N_out = M;
-  // some return place holder
+    // Flag indicating whether all reference stations are valid.
+    bool valid_reference_line = true;
+
+    // =========================================================
+    // 4. Compute local tangent and normal vectors
+    // =========================================================
+
+    for (int i = 0; i < M; ++i)
+    {
+        su2double tangent[3] = {0.0, 0.0, 0.0};
+        su2double normal[2]  = {0.0, 0.0};
+
+        // -----------------------------------------------------
+        // 4.1 Compute the local tangent vector
+        // -----------------------------------------------------
+        //
+        // First station:
+        //     Forward difference
+        //
+        // Last station:
+        //     Backward difference
+        //
+        // Interior stations:
+        //     Centered secant approximation
+        //
+        // The tangent follows the three-dimensional
+        // quarter-chord reference line, accounting for
+        // both wing sweep and dihedral.
+        // -----------------------------------------------------
+
+        if (i == 0)
+        {
+            tangent[0] = Xc[1] - Xc[0];
+            tangent[1] = Yc[1] - Yc[0];
+            tangent[2] = Zc[1] - Zc[0];
+        }
+        else if (i == M - 1)
+        {
+            tangent[0] = Xc[M - 1] - Xc[M - 2];
+            tangent[1] = Yc[M - 1] - Yc[M - 2];
+            tangent[2] = Zc[M - 1] - Zc[M - 2];
+        }
+        else
+        {
+            tangent[0] = Xc[i + 1] - Xc[i - 1];
+            tangent[1] = Yc[i + 1] - Yc[i - 1];
+            tangent[2] = Zc[i + 1] - Zc[i - 1];
+        }
+
+        // -----------------------------------------------------
+        // 4.2 Normalize the three-dimensional tangent vector
+        // -----------------------------------------------------
+
+        const su2double tangent_mag =
+            std::sqrt(
+                tangent[0] * tangent[0] +
+                tangent[1] * tangent[1] +
+                tangent[2] * tangent[2]);
+
+        // Reject zero-length or non-finite tangent vectors.
+
+        if (!std::isfinite(tangent_mag) ||
+            tangent_mag <= EPS)
+        {
+            if (rank == MASTER_NODE)
+            {
+                std::cerr
+                    << "ERROR: Degenerate tangent vector at "
+                    << "station " << i
+                    << " (Y = " << Yc[i] << ")"
+                    << " for FFD box '" << FFDBox->GetTag()
+                    << "'."
+                    << std::endl;
+            }
+
+            valid_reference_line = false;
+            break;
+        }
+
+        tangent[0] /= tangent_mag;
+        tangent[1] /= tangent_mag;
+        tangent[2] /= tangent_mag;
+
+        // -----------------------------------------------------
+        // 4.3 Project the tangent onto the Y-Z plane
+        // -----------------------------------------------------
+        //
+        // The normal vector is constrained to the Y-Z plane
+        // such that:
+        //
+        //     Normal_X = 0
+        //
+        // This preserves the original definition of the
+        // dihedral-aware deformation direction.
+        // -----------------------------------------------------
+
+        const su2double ty = tangent[1];
+        const su2double tz = tangent[2];
+
+        const su2double projected_mag =
+            std::sqrt(ty * ty + tz * tz);
+
+        // A tangent parallel to the global X-axis does not
+        // define a unique normal through this formulation.
+
+        if (!std::isfinite(projected_mag) ||
+            projected_mag <= EPS)
+        {
+            if (rank == MASTER_NODE)
+            {
+                std::cerr
+                    << "ERROR: Degenerate Y-Z tangent projection "
+                    << "at station " << i
+                    << " (Y = " << Yc[i] << ")"
+                    << " for FFD box '" << FFDBox->GetTag()
+                    << "'."
+                    << std::endl;
+            }
+
+            valid_reference_line = false;
+            break;
+        }
+
+        // -----------------------------------------------------
+        // 4.4 Compute the local unit normal vector
+        // -----------------------------------------------------
+        //
+        // The normal is obtained from:
+        //
+        //     n = (e_x cross t) / |e_x cross t|
+        //
+        // where e_x is the global streamwise unit vector.
+        //
+        // Therefore:
+        //
+        //     Normal_X = 0
+        //     Normal_Y = -Tangent_Z / projected_mag
+        //     Normal_Z =  Tangent_Y / projected_mag
+        //
+        // This guarantees:
+        //
+        //     dot(tangent, normal) = 0
+        //     magnitude(normal)    = 1
+        // -----------------------------------------------------
+
+        normal[0] = -tz / projected_mag;
+        normal[1] =  ty / projected_mag;
+
+        // -----------------------------------------------------
+        // 4.5 Validate the computed vectors
+        // -----------------------------------------------------
+
+        if (!std::isfinite(tangent[0]) ||
+            !std::isfinite(tangent[1]) ||
+            !std::isfinite(tangent[2]) ||
+            !std::isfinite(normal[0])  ||
+            !std::isfinite(normal[1]))
+        {
+            if (rank == MASTER_NODE)
+            {
+                std::cerr
+                    << "ERROR: Non-finite tangent or normal "
+                    << "vector at station " << i
+                    << " for FFD box '" << FFDBox->GetTag()
+                    << "'."
+                    << std::endl;
+            }
+
+            valid_reference_line = false;
+            break;
+        }
+
+        // -----------------------------------------------------
+        // 4.6 Store the computed tangent and normal vectors
+        // -----------------------------------------------------
+
+        tangent_normal_array[i][0] =
+            static_cast<su2double>(i);
+
+        tangent_normal_array[i][1] = Yc[i];
+
+        tangent_normal_array[i][2] = tangent[0];
+        tangent_normal_array[i][3] = tangent[1];
+        tangent_normal_array[i][4] = tangent[2];
+
+        tangent_normal_array[i][5] = normal[0];
+        tangent_normal_array[i][6] = normal[1];
+    }
+
+    // =========================================================
+    // 5. Handle invalid reference geometry
+    // =========================================================
+    //
+    // Since all MPI ranks operate on the same chord_array_,
+    // the geometric validation should produce identical
+    // results on every rank.
+    //
+    // Do not return partially initialized geometric data.
+    // =========================================================
+
+    if (!valid_reference_line)
+    {
+        for (int i = 0; i < M; ++i)
+        {
+            delete[] tangent_normal_array[i];
+        }
+
+        delete[] tangent_normal_array;
+
+        N_out = 0;
+
+        return nullptr;
+    }
+
+    // =========================================================
+    // 6. Write diagnostic CSV file
+    // =========================================================
+    //
+    // Only the master rank writes the output file to avoid
+    // simultaneous file access by multiple MPI ranks.
+    //
+    // The original CSV filename and column format are retained.
+    // =========================================================
+
+    if (rank == MASTER_NODE)
+    {
+        std::ostringstream fname;
+
+        fname << "tangent_normals_"
+              << FFDBox->GetTag()
+              << ".csv";
+
+        std::ofstream outfile(fname.str());
+
+        if (outfile.is_open())
+        {
+            outfile
+                << "X,Y,Z,"
+                << "Tangent_X,Tangent_Y,Tangent_Z,"
+                << "Normal_Y,Normal_Z\n";
+
+            outfile << std::fixed << std::setprecision(8);
+
+            for (int i = 0; i < M; ++i)
+            {
+                outfile
+                    << Xc[i] << ","
+                    << Yc[i] << ","
+                    << Zc[i] << ","
+                    << tangent_normal_array[i][2] << ","
+                    << tangent_normal_array[i][3] << ","
+                    << tangent_normal_array[i][4] << ","
+                    << tangent_normal_array[i][5] << ","
+                    << tangent_normal_array[i][6] << "\n";
+            }
+
+            outfile.close();
+
+            std::cout
+                << "Tangent and normal vectors written to "
+                << fname.str()
+                << std::endl;
+        }
+        else
+        {
+            std::cerr
+                << "WARNING: Unable to open output file "
+                << fname.str()
+                << std::endl;
+        }
+    }
+
+    // =========================================================
+    // 7. Return the locally computed tangent-normal array
+    // =========================================================
+    //
+    // No MPI broadcast is required because all ranks have
+    // independently computed the same reference vectors.
+    //
+    // The caller is responsible for deallocating the returned
+    // two-dimensional array.
+    // =========================================================
+
+    N_out = M;
+
+    return tangent_normal_array;
+}
+
+void CSurfaceMovement::getRotationPoint(
+    CGeometry* geometry,
+    CConfig* config,
+    CFreeFormDefBox* FFDBox,
+    unsigned short iFFDBox,
+    int& N_out)
+{
+    // =========================================================
+    // Construct a quarter-chord reference line for the FFD box.
+    //
+    // Three methods are used to determine rotation points:
+    //
+    // 1. EXTRACTED:
+    //    Direct extraction from the aerodynamic surface mesh.
+    //
+    // 2. INTERPOLATED:
+    //    Linear interpolation between valid interior stations.
+    //
+    // 3. EXTRAPOLATED:
+    //    Linear extrapolation beyond the available stations.
+    //
+    // This allows the FFD box to extend beyond the physical
+    // wing root and wing tip without invalidating the local
+    // twist parameterization.
+    // =========================================================
+
+    N_out = 0;
+    chord_array_.clear();
+
+    const su2double EPS = 1.0e-12;
+    const su2double SLICE_TOL = 1.0e-1;
+
+    // Station classification.
+    enum StationType
+    {
+        INVALID      = 0,
+        EXTRACTED    = 1,
+        INTERPOLATED = 2,
+        EXTRAPOLATED = 3
+    };
+
+    // =========================================================
+    // 1. Extract local aerodynamic surface coordinates
+    // =========================================================
+
+    std::vector<su2double> coords_local;
+
+    int supported_marker_found = 0;
+
+    for (unsigned short iMarker = 0;
+         iMarker < config->GetnMarker_All();
+         ++iMarker)
+    {
+        const auto& marker_tag =
+            config->GetMarker_All_TagBound(iMarker);
+
+        // Supported aerodynamic surface markers.
+        if (marker_tag != "wing" &&
+            marker_tag != "wetSurface0")
+        {
+            continue;
+        }
+
+        supported_marker_found = 1;
+
+        const unsigned long nVertex =
+            geometry->GetnVertex(iMarker);
+
+        coords_local.reserve(
+            coords_local.size() + 3 * nVertex);
+
+        for (unsigned long iVertex = 0;
+             iVertex < nVertex;
+             ++iVertex)
+        {
+            const unsigned long iPoint =
+                geometry->vertex[iMarker][iVertex]->GetNode();
+
+            // Exclude duplicate halo nodes.
+            if (!geometry->nodes->GetDomain(iPoint))
+            {
+                continue;
+            }
+
+            coords_local.push_back(
+                geometry->nodes->GetCoord(iPoint, 0));
+
+            coords_local.push_back(
+                geometry->nodes->GetCoord(iPoint, 1));
+
+            coords_local.push_back(
+                geometry->nodes->GetCoord(iPoint, 2));
+        }
+    }
+
+    // =========================================================
+    // 2. Verify that a supported marker exists globally
+    // =========================================================
+
+    int global_marker_found = 0;
+
+    SU2_MPI::Allreduce(
+        &supported_marker_found,
+        &global_marker_found,
+        1,
+        MPI_INT,
+        MPI_MAX,
+        SU2_MPI::GetComm());
+
+    if (!global_marker_found)
+    {
+        if (rank == MASTER_NODE)
+        {
+            std::cerr
+                << "\nWARNING: No supported surface markers "
+                << "were found.\n"
+                << "Supported markers: 'wing', 'wetSurface0'.\n"
+                << "FFD box: " << FFDBox->GetTag() << "\n"
+                << "Rotation points and local tangent/normal "
+                << "vectors will not be calculated.\n"
+                << std::endl;
+        }
+
+        return;
+    }
+
+    // =========================================================
+    // 3. Gather coordinate counts
+    // =========================================================
+
+    int N_local = static_cast<int>(coords_local.size());
+
+    std::vector<int> recv_counts;
+    std::vector<int> displs;
+
+    if (rank == MASTER_NODE)
+    {
+        recv_counts.resize(size, 0);
+        displs.resize(size, 0);
+    }
+
+    SU2_MPI::Gather(
+        &N_local,
+        1,
+        MPI_INT,
+        rank == MASTER_NODE ? recv_counts.data() : nullptr,
+        1,
+        MPI_INT,
+        MASTER_NODE,
+        SU2_MPI::GetComm());
+
+    int total_coords = 0;
+    int total_points = 0;
+
+    if (rank == MASTER_NODE)
+    {
+        for (int iRank = 0; iRank < size; ++iRank)
+        {
+            displs[iRank] = total_coords;
+            total_coords += recv_counts[iRank];
+        }
+
+        total_points = total_coords / 3;
+    }
+
+    // =========================================================
+    // 4. Gather aerodynamic surface coordinates
+    // =========================================================
+
+    std::vector<su2double> coords_global;
+
+    if (rank == MASTER_NODE)
+    {
+        coords_global.resize(total_coords);
+    }
+
+    SU2_MPI::Gatherv(
+        coords_local.data(),
+        N_local,
+        MPI_DOUBLE,
+        rank == MASTER_NODE ? coords_global.data() : nullptr,
+        rank == MASTER_NODE ? recv_counts.data() : nullptr,
+        rank == MASTER_NODE ? displs.data() : nullptr,
+        MPI_DOUBLE,
+        MASTER_NODE,
+        SU2_MPI::GetComm());
+
+    // Release local coordinate storage.
+    std::vector<su2double>().swap(coords_local);
+
+    // =========================================================
+    // 5. Construct the quarter-chord reference line
+    // =========================================================
+
+    int valid_reference_line = 1;
+
+    // Classification of each FFD station.
+    std::vector<int> station_type;
+
+    if (rank == MASTER_NODE)
+    {
+        std::cout
+            << "\nConstructing quarter-chord reference line "
+            << "for FFD box '" << FFDBox->GetTag() << "'.\n"
+            << "Total wing surface points collected: "
+            << total_points
+            << std::endl;
+
+        // -----------------------------------------------------
+        // 5.1 Obtain the spanwise FFD lattice information
+        // -----------------------------------------------------
+
+        const su2double FFD_ymin =
+            config->GetCoordFFDBox(iFFDBox, 1);
+
+        const su2double FFD_ymax =
+            config->GetCoordFFDBox(iFFDBox, 7);
+
+        const unsigned short FFD_ypoints =
+            config->GetDegreeFFDBox(iFFDBox, 1) + 1;
+
+        std::cout
+            << "FFD_ymin: " << FFD_ymin << "\n"
+            << "FFD_ymax: " << FFD_ymax << "\n"
+            << "FFD_ypoints: " << FFD_ypoints << "\n"
+            << "FFD spanwise degree: "
+            << config->GetDegreeFFDBox(iFFDBox, 1)
+            << std::endl;
+
+        // -----------------------------------------------------
+        // 5.2 Validate the initial geometry
+        // -----------------------------------------------------
+
+        if (total_points == 0)
+        {
+            std::cerr
+                << "ERROR: No usable aerodynamic surface "
+                << "points were collected."
+                << std::endl;
+
+            valid_reference_line = 0;
+        }
+
+        if (FFD_ypoints < 2)
+        {
+            std::cerr
+                << "ERROR: At least two spanwise FFD "
+                << "stations are required."
+                << std::endl;
+
+            valid_reference_line = 0;
+        }
+
+        if (!std::isfinite(FFD_ymin) ||
+            !std::isfinite(FFD_ymax) ||
+            FFD_ymax - FFD_ymin <= EPS)
+        {
+            std::cerr
+                << "ERROR: Invalid spanwise FFD extent."
+                << std::endl;
+
+            valid_reference_line = 0;
+        }
+
+        if (valid_reference_line)
+        {
+            // -------------------------------------------------
+            // 5.3 Determine the physical surface extent
+            // -------------------------------------------------
+            //
+            // These bounds are diagnostic only.
+            //
+            // The FFD box is permitted to extend beyond
+            // the collected aerodynamic surface.
+            // -------------------------------------------------
+
+            su2double surface_ymin =
+                std::numeric_limits<double>::infinity();
+
+            su2double surface_ymax =
+                -std::numeric_limits<double>::infinity();
+
+            for (int iPoint = 0;
+                 iPoint < total_points;
+                 ++iPoint)
+            {
+                const su2double y =
+                    coords_global[3 * iPoint + 1];
+
+                if (!std::isfinite(y))
+                {
+                    continue;
+                }
+
+                if (y < surface_ymin)
+                {
+                    surface_ymin = y;
+                }
+
+                if (y > surface_ymax)
+                {
+                    surface_ymax = y;
+                }
+            }
+
+            std::cout
+                << "Surface Y_min: " << surface_ymin << "\n"
+                << "Surface Y_max: " << surface_ymax
+                << std::endl;
+
+            // -------------------------------------------------
+            // 5.4 Initialize all FFD stations
+            // -------------------------------------------------
+            //
+            // Allocate storage for every station in advance.
+            //
+            // Missing stations must not be removed because
+            // doing so would change the correspondence
+            // between the FFD-j index and chord_array_.
+            // -------------------------------------------------
+
+            const su2double dy =
+                (FFD_ymax - FFD_ymin) /
+                static_cast<su2double>(FFD_ypoints - 1);
+
+            std::cout
+                << "Spanwise station spacing: "
+                << dy
+                << std::endl;
+
+            chord_array_.resize(FFD_ypoints);
+
+            station_type.assign(
+                FFD_ypoints, INVALID);
+
+            // Store indices of directly extracted stations.
+            //
+            // Only these stations will be used as reference
+            // points for interpolation and extrapolation.
+
+            std::vector<int> extracted_indices;
+
+            // =================================================
+            // 6. First pass: direct surface extraction
+            // =================================================
+
+            for (unsigned short j = 0;
+                 j < FFD_ypoints;
+                 ++j)
+            {
+                const su2double target_y =
+                    FFD_ymin + j * dy;
+
+                // Initialize the station.
+                chord_array_[j] = {
+                    static_cast<su2double>(j + 1),
+                    target_y,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                };
+
+                su2double xmin =
+                    std::numeric_limits<double>::infinity();
+
+                su2double xmax =
+                    -std::numeric_limits<double>::infinity();
+
+                su2double z_le = 0.0;
+                su2double z_te = 0.0;
+
+                unsigned long slice_count = 0;
+
+                // ---------------------------------------------
+                // 6.1 Extract the local wing cross-section
+                // ---------------------------------------------
+
+                for (int iPoint = 0;
+                     iPoint < total_points;
+                     ++iPoint)
+                {
+                    const su2double x =
+                        coords_global[3 * iPoint];
+
+                    const su2double y =
+                        coords_global[3 * iPoint + 1];
+
+                    const su2double z =
+                        coords_global[3 * iPoint + 2];
+
+                    if (!std::isfinite(x) ||
+                        !std::isfinite(y) ||
+                        !std::isfinite(z))
+                    {
+                        continue;
+                    }
+
+                    if (std::abs(y - target_y) >= SLICE_TOL)
+                    {
+                        continue;
+                    }
+
+                    ++slice_count;
+
+                    // Leading-edge coordinates.
+                    if (x < xmin)
+                    {
+                        xmin = x;
+                        z_le = z;
+                    }
+
+                    // Trailing-edge coordinates.
+                    if (x > xmax)
+                    {
+                        xmax = x;
+                        z_te = z;
+                    }
+                }
+
+                // ---------------------------------------------
+                // 6.2 Check whether direct extraction succeeded
+                // ---------------------------------------------
+                //
+                // Missing stations are no longer fatal.
+                //
+                // They are retained as INVALID and will be
+                // reconstructed during the second pass.
+                // ---------------------------------------------
+
+                if (slice_count < 2 ||
+                    !std::isfinite(xmin) ||
+                    !std::isfinite(xmax) ||
+                    xmax - xmin <= EPS)
+                {
+                    std::cout
+                        << "FFD station " << j
+                        << " (Y = " << target_y << "): "
+                        << "No valid cross-section found. "
+                        << "Deferred for reconstruction."
+                        << std::endl;
+
+                    continue;
+                }
+
+                // ---------------------------------------------
+                // 6.3 Compute the quarter-chord coordinates
+                // ---------------------------------------------
+
+                const su2double chord =
+                    xmax - xmin;
+
+                const su2double x_quarter =
+                    xmin + 0.25 * chord;
+
+                const su2double z_qc =
+                    z_le + 0.25 * (z_te - z_le);
+
+                if (!std::isfinite(chord) ||
+                    !std::isfinite(x_quarter) ||
+                    !std::isfinite(z_qc))
+                {
+                    continue;
+                }
+
+                // Store the extracted reference point.
+                chord_array_[j] = {
+                    static_cast<su2double>(j + 1),
+                    target_y,
+                    xmin,
+                    xmax,
+                    chord,
+                    x_quarter,
+                    z_qc
+                };
+
+                station_type[j] = EXTRACTED;
+
+                extracted_indices.push_back(j);
+
+                std::cout
+                    << "FFD station " << j
+                    << " (Y = " << target_y << "): "
+                    << "EXTRACTED"
+                    << std::endl;
+            }
+
+            // =================================================
+            // 7. Verify sufficient directly extracted stations
+            // =================================================
+            //
+            // At least two directly extracted stations are
+            // necessary to define a spanwise geometric trend.
+            // =================================================
+
+            const int N_extracted =
+                static_cast<int>(extracted_indices.size());
+
+            if (N_extracted < 2)
+            {
+                std::cerr
+                    << "ERROR: Insufficient directly extracted "
+                    << "quarter-chord stations.\n"
+                    << "Required: 2\n"
+                    << "Available: " << N_extracted
+                    << std::endl;
+
+                valid_reference_line = 0;
+            }
+
+            // =================================================
+            // 8. Second pass: reconstruct missing stations
+            // =================================================
+
+            if (valid_reference_line)
+            {
+                for (unsigned short j = 0;
+                     j < FFD_ypoints;
+                     ++j)
+                {
+                    // Directly extracted stations do not
+                    // require reconstruction.
+
+                    if (station_type[j] == EXTRACTED)
+                    {
+                        continue;
+                    }
+
+                    int i_left  = -1;
+                    int i_right = -1;
+
+                    const int first_valid =
+                        extracted_indices.front();
+
+                    const int last_valid =
+                        extracted_indices.back();
+
+                    // -----------------------------------------
+                    // 8.1 Root-side extrapolation
+                    // -----------------------------------------
+                    //
+                    // Use the first two directly extracted
+                    // quarter-chord stations.
+                    // -----------------------------------------
+
+                    if (j < first_valid)
+                    {
+                        i_left = extracted_indices[0];
+                        i_right = extracted_indices[1];
+
+                        station_type[j] = EXTRAPOLATED;
+                    }
+
+                    // -----------------------------------------
+                    // 8.2 Tip-side extrapolation
+                    // -----------------------------------------
+                    //
+                    // Use the last two directly extracted
+                    // quarter-chord stations.
+                    // -----------------------------------------
+
+                    else if (j > last_valid)
+                    {
+                        i_left =
+                            extracted_indices[N_extracted - 2];
+
+                        i_right =
+                            extracted_indices[N_extracted - 1];
+
+                        station_type[j] = EXTRAPOLATED;
+                    }
+
+                    // -----------------------------------------
+                    // 8.3 Interior interpolation
+                    // -----------------------------------------
+                    //
+                    // Find the nearest directly extracted
+                    // station on either side of the missing
+                    // station.
+                    // -----------------------------------------
+
+                    else
+                    {
+                        for (int k = 0;
+                             k < N_extracted - 1;
+                             ++k)
+                        {
+                            if (extracted_indices[k] < j &&
+                                extracted_indices[k + 1] > j)
+                            {
+                                i_left =
+                                    extracted_indices[k];
+
+                                i_right =
+                                    extracted_indices[k + 1];
+
+                                break;
+                            }
+                        }
+
+                        station_type[j] = INTERPOLATED;
+                    }
+
+                    // Verify that valid reference stations
+                    // were identified.
+
+                    if (i_left < 0 || i_right < 0)
+                    {
+                        std::cerr
+                            << "ERROR: Unable to reconstruct "
+                            << "FFD station " << j
+                            << std::endl;
+
+                        valid_reference_line = 0;
+
+                        break;
+                    }
+
+                    // -----------------------------------------
+                    // 8.4 Compute interpolation/extrapolation
+                    //     parameter
+                    // -----------------------------------------
+                    //
+                    // lambda = (Y - Y_left) /
+                    //          (Y_right - Y_left)
+                    //
+                    // 0 <= lambda <= 1 : interpolation
+                    // lambda < 0       : root extrapolation
+                    // lambda > 1       : tip extrapolation
+                    // -----------------------------------------
+
+                    const su2double y_target =
+                        chord_array_[j][1];
+
+                    const su2double y_left =
+                        chord_array_[i_left][1];
+
+                    const su2double y_right =
+                        chord_array_[i_right][1];
+
+                    const su2double delta_y =
+                        y_right - y_left;
+
+                    if (std::abs(delta_y) <= EPS)
+                    {
+                        std::cerr
+                            << "ERROR: Degenerate reference "
+                            << "stations during reconstruction."
+                            << std::endl;
+
+                        valid_reference_line = 0;
+
+                        break;
+                    }
+
+                    const su2double lambda =
+                        (y_target - y_left) / delta_y;
+
+                    // -----------------------------------------
+                    // 8.5 Reconstruct geometric quantities
+                    // -----------------------------------------
+                    //
+                    // Apply the same linear reconstruction to:
+                    //
+                    // [2] Leading-edge X coordinate
+                    // [3] Trailing-edge X coordinate
+                    // [4] Projected chord length
+                    // [5] Quarter-chord X coordinate
+                    // [6] Quarter-chord Z coordinate
+                    //
+                    // The original station index and target
+                    // spanwise coordinate remain unchanged.
+                    // -----------------------------------------
+
+                    for (int k = 2; k < 7; ++k)
+                    {
+                        const su2double q_left =
+                            chord_array_[i_left][k];
+
+                        const su2double q_right =
+                            chord_array_[i_right][k];
+
+                        chord_array_[j][k] =
+                            q_left +
+                            lambda * (q_right - q_left);
+                    }
+
+                    // -----------------------------------------
+                    // 8.6 Validate reconstructed coordinates
+                    // -----------------------------------------
+
+                    for (int k = 2; k < 7; ++k)
+                    {
+                        if (!std::isfinite(chord_array_[j][k]))
+                        {
+                            valid_reference_line = 0;
+                        }
+                    }
+
+                    if (!valid_reference_line)
+                    {
+                        std::cerr
+                            << "ERROR: Non-finite reconstructed "
+                            << "geometry at FFD station "
+                            << j
+                            << std::endl;
+
+                        break;
+                    }
+
+                    // Outside the physical wing, the chord
+                    // is only an extrapolated diagnostic.
+                    //
+                    // A non-positive extrapolated chord does
+                    // not necessarily invalidate the rotation
+                    // center, but it should be reported.
+
+                    if (chord_array_[j][4] <= EPS)
+                    {
+                        if (station_type[j] == INTERPOLATED)
+                        {
+                            std::cerr
+                                << "ERROR: Non-positive "
+                                << "interpolated chord at "
+                                << "FFD station " << j
+                                << std::endl;
+
+                            valid_reference_line = 0;
+
+                            break;
+                        }
+
+                        std::cerr
+                            << "WARNING: Non-positive "
+                            << "extrapolated chord at "
+                            << "FFD station " << j << ". "
+                            << "The extrapolated rotation "
+                            << "center is retained."
+                            << std::endl;
+                    }
+
+                    // Report the reconstruction method.
+
+                    std::cout
+                        << "FFD station " << j
+                        << " (Y = " << y_target << "): "
+                        << (station_type[j] == INTERPOLATED
+                            ? "INTERPOLATED"
+                            : "EXTRAPOLATED")
+                        << " using stations "
+                        << i_left << " and " << i_right
+                        << std::endl;
+                }
+            }
+
+            // =================================================
+            // 9. Report reference-line construction summary
+            // =================================================
+
+            if (valid_reference_line)
+            {
+                int n_extracted = 0;
+                int n_interpolated = 0;
+                int n_extrapolated = 0;
+
+                for (unsigned short j = 0;
+                     j < FFD_ypoints;
+                     ++j)
+                {
+                    switch (station_type[j])
+                    {
+                        case EXTRACTED:
+                            ++n_extracted;
+                            break;
+
+                        case INTERPOLATED:
+                            ++n_interpolated;
+                            break;
+
+                        case EXTRAPOLATED:
+                            ++n_extrapolated;
+                            break;
+
+                        default:
+                            valid_reference_line = 0;
+                            break;
+                    }
+                }
+
+                std::cout
+                    << "\nQuarter-chord reference line summary:"
+                    << "\nTotal FFD stations: "
+                    << FFD_ypoints
+                    << "\nDirectly extracted: "
+                    << n_extracted
+                    << "\nInterpolated: "
+                    << n_interpolated
+                    << "\nExtrapolated: "
+                    << n_extrapolated
+                    << "\n"
+                    << std::endl;
+            }
+        }
+    }
+
+    // =========================================================
+    // 10. Broadcast validation status
+    // =========================================================
+    //
+    // All MPI ranks must follow the same execution path.
+    // =========================================================
+
+    SU2_MPI::Bcast(
+        &valid_reference_line,
+        1,
+        MPI_INT,
+        MASTER_NODE,
+        SU2_MPI::GetComm());
+
+    if (!valid_reference_line)
+    {
+        chord_array_.clear();
+
+        N_out = 0;
+
+        return;
+    }
+
+    // =========================================================
+    // 11. Broadcast the number of reference stations
+    // =========================================================
+
+    int M = 0;
+
+    if (rank == MASTER_NODE)
+    {
+        M = static_cast<int>(chord_array_.size());
+    }
+
+    SU2_MPI::Bcast(
+        &M,
+        1,
+        MPI_INT,
+        MASTER_NODE,
+        SU2_MPI::GetComm());
+
+    // =========================================================
+    // 12. Flatten and broadcast chord_array_
+    // =========================================================
+
+    std::vector<su2double> flat_array(M * 7);
+
+    if (rank == MASTER_NODE)
+    {
+        for (int i = 0; i < M; ++i)
+        {
+            for (int k = 0; k < 7; ++k)
+            {
+                flat_array[i * 7 + k] =
+                    chord_array_[i][k];
+            }
+        }
+    }
+
+    SU2_MPI::Bcast(
+        flat_array.data(),
+        M * 7,
+        MPI_DOUBLE,
+        MASTER_NODE,
+        SU2_MPI::GetComm());
+
+    // =========================================================
+    // 13. Reconstruct chord_array_ on non-master ranks
+    // =========================================================
+
+    if (rank != MASTER_NODE)
+    {
+        chord_array_.resize(M);
+
+        for (int i = 0; i < M; ++i)
+        {
+            chord_array_[i] = {
+                flat_array[i * 7 + 0],
+                flat_array[i * 7 + 1],
+                flat_array[i * 7 + 2],
+                flat_array[i * 7 + 3],
+                flat_array[i * 7 + 4],
+                flat_array[i * 7 + 5],
+                flat_array[i * 7 + 6]
+            };
+        }
+    }
+
+    // =========================================================
+    // 14. Write the diagnostic CSV file
+    // =========================================================
+    //
+    // An additional column identifies whether each rotation
+    // point was extracted, interpolated, or extrapolated.
+    //
+    // The internal chord_array_ structure remains unchanged.
+    // =========================================================
+
+    if (rank == MASTER_NODE)
+    {
+        std::ostringstream fname;
+
+        fname << "rotation_points_"
+              << FFDBox->GetTag()
+              << ".csv";
+
+        std::ofstream outfile(fname.str());
+
+        if (outfile.is_open())
+        {
+            outfile
+                << "Station,Y,X_LE,X_TE,Chord,"
+                << "X_QC,Z_QC,Method\n";
+
+            outfile
+                << std::fixed
+                << std::setprecision(8);
+
+            for (int i = 0; i < M; ++i)
+            {
+                const char* method = "INVALID";
+
+                switch (station_type[i])
+                {
+                    case EXTRACTED:
+                        method = "EXTRACTED";
+                        break;
+
+                    case INTERPOLATED:
+                        method = "INTERPOLATED";
+                        break;
+
+                    case EXTRAPOLATED:
+                        method = "EXTRAPOLATED";
+                        break;
+                }
+
+                outfile
+                    << i + 1 << ","
+                    << chord_array_[i][1] << ","
+                    << chord_array_[i][2] << ","
+                    << chord_array_[i][3] << ","
+                    << chord_array_[i][4] << ","
+                    << chord_array_[i][5] << ","
+                    << chord_array_[i][6] << ","
+                    << method << "\n";
+            }
+
+            outfile.close();
+
+            std::cout
+                << "Quarter-chord reference line written to "
+                << fname.str()
+                << std::endl;
+        }
+        else
+        {
+            std::cerr
+                << "WARNING: Unable to open output file "
+                << fname.str()
+                << std::endl;
+        }
+
+        std::cout
+            << "Successfully constructed "
+            << M
+            << " quarter-chord reference points for FFD box '"
+            << FFDBox->GetTag() << "'.\n"
+            << std::endl;
+    }
+
+    // =========================================================
+    // 15. Return the number of reference stations
+    // =========================================================
+
+    N_out = M;
 }
 
 su2double CSurfaceMovement::SetCartesianCoord(CGeometry* geometry, CConfig* config, CFreeFormDefBox* FFDBox,

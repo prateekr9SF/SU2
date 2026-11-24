@@ -12,7 +12,7 @@ def print_decimal_values(count):
 if __name__ == "__main__":
     
 
-    count = 234
+    count = 90
 
 
     

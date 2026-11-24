@@ -1,5 +1,30 @@
 import numpy as np
 
+"""
+Generate the coordinate and velocity transformation equations for rotating
+a CFD solution from the aircraft body-fixed coordinate system to the
+wind (freestream) coordinate system.
+
+The script accepts a user-defined angle of attack (AoA), computes the
+corresponding rotation matrix about the body Y-axis, and prints the
+transformation equations for both mesh coordinates and velocity components.
+The output is formatted for direct use in Tecplot 360 equation definitions.
+
+Coordinate transformation:
+    X_fs =  cos(alpha) * X + sin(alpha) * Z
+    Y_fs =  Y
+    Z_fs = -sin(alpha) * X + cos(alpha) * Z
+
+Velocity transformation:
+    U_fs =  cos(alpha) * Velocity_X + sin(alpha) * Velocity_Z
+    V_fs =  Velocity_Y
+    W_fs = -sin(alpha) * Velocity_X + cos(alpha) * Velocity_Z
+
+This transformation is commonly used to express CFD results in the
+freestream reference frame for wake visualization and post-processing,
+ensuring that wake convection is aligned with the aircraft flight direction.
+"""
+
 # User input: angle of attack in degrees
 aoa_deg = 4
 
