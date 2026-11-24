@@ -2283,7 +2283,7 @@ void CSurfaceMovement::getRotationPoint(
     // 1. Extract local aerodynamic surface coordinates
     // =========================================================
 
-    std::vector<su2double> coords_local;
+    std::vector<double> coords_local;
 
     int supported_marker_found = 0;
 
@@ -2323,13 +2323,13 @@ void CSurfaceMovement::getRotationPoint(
             }
 
             coords_local.push_back(
-                geometry->nodes->GetCoord(iPoint, 0));
+                SU2_TYPE::GetValue(geometry->nodes->GetCoord(iPoint, 0)));
 
             coords_local.push_back(
-                geometry->nodes->GetCoord(iPoint, 1));
+                SU2_TYPE::GetValue(geometry->nodes->GetCoord(iPoint, 1)));
 
             coords_local.push_back(
-                geometry->nodes->GetCoord(iPoint, 2));
+                SU2_TYPE::GetValue(geometry->nodes->GetCoord(iPoint, 2)));
         }
     }
 
@@ -2365,68 +2365,62 @@ void CSurfaceMovement::getRotationPoint(
     }
 
     // =========================================================
-    // 3. Gather coordinate counts
+    // 3-4. Collect passive coordinates on the master rank.
     // =========================================================
-
     int N_local = static_cast<int>(coords_local.size());
-
-    std::vector<int> recv_counts;
-    std::vector<int> displs;
-
-    if (rank == MASTER_NODE)
+    std::vector<double> coords_global;
+    const auto report_extent = [](int source, const std::vector<double>& coords)
     {
-        recv_counts.resize(size, 0);
-        displs.resize(size, 0);
-    }
-
-    SU2_MPI::Gather(
-        &N_local,
-        1,
-        MPI_INT,
-        rank == MASTER_NODE ? recv_counts.data() : nullptr,
-        1,
-        MPI_INT,
-        MASTER_NODE,
-        SU2_MPI::GetComm());
-
-    int total_coords = 0;
-    int total_points = 0;
-
-    if (rank == MASTER_NODE)
-    {
-        for (int iRank = 0; iRank < size; ++iRank)
+        std::cout << "Rank " << source << " | Surface points: "
+                  << coords.size() / 3;
+        if (!coords.empty())
         {
-            displs[iRank] = total_coords;
-            total_coords += recv_counts[iRank];
+            double ymin = coords[1], ymax = coords[1];
+            for (size_t i = 1; i < coords.size(); i += 3)
+            {
+                ymin = std::min(ymin, coords[i]);
+                ymax = std::max(ymax, coords[i]);
+            }
+            std::cout << " | Y_min: " << ymin << " | Y_max: " << ymax;
         }
+        std::cout << std::endl;
+    };
 
-        total_points = total_coords / 3;
-    }
-
-    // =========================================================
-    // 4. Gather aerodynamic surface coordinates
-    // =========================================================
-
-    std::vector<su2double> coords_global;
-
+#ifdef HAVE_MPI
+    const int count_tag = 1701;
+    const int coords_tag = 1702;
     if (rank == MASTER_NODE)
     {
-        coords_global.resize(total_coords);
+        report_extent(rank, coords_local);
+        coords_global.swap(coords_local);
+        for (int source = 0; source < size; ++source)
+        {
+            if (source == MASTER_NODE) continue;
+            int count = 0;
+            MPI_Recv(&count, 1, MPI_INT, source, count_tag,
+                     SU2_MPI::GetComm(), MPI_STATUS_IGNORE);
+            std::vector<double> received(count);
+            if (count > 0)
+                MPI_Recv(received.data(), count, MPI_DOUBLE, source,
+                         coords_tag, SU2_MPI::GetComm(), MPI_STATUS_IGNORE);
+            report_extent(source, received);
+            coords_global.insert(coords_global.end(), received.begin(), received.end());
+        }
     }
-
-    SU2_MPI::Gatherv(
-        coords_local.data(),
-        N_local,
-        MPI_DOUBLE,
-        rank == MASTER_NODE ? coords_global.data() : nullptr,
-        rank == MASTER_NODE ? recv_counts.data() : nullptr,
-        rank == MASTER_NODE ? displs.data() : nullptr,
-        MPI_DOUBLE,
-        MASTER_NODE,
-        SU2_MPI::GetComm());
-
-    // Release local coordinate storage.
-    std::vector<su2double>().swap(coords_local);
+    else
+    {
+        MPI_Send(&N_local, 1, MPI_INT, MASTER_NODE, count_tag,
+                 SU2_MPI::GetComm());
+        if (N_local > 0)
+            MPI_Send(coords_local.data(), N_local, MPI_DOUBLE, MASTER_NODE,
+                     coords_tag, SU2_MPI::GetComm());
+    }
+#else
+    report_extent(rank, coords_local);
+    coords_global.swap(coords_local);
+#endif
+    const int total_points = static_cast<int>(coords_global.size() / 3);
+    std::vector<double>().swap(coords_local);
 
     // =========================================================
     // 5. Construct the quarter-chord reference line
@@ -3089,47 +3083,29 @@ void CSurfaceMovement::getRotationPoint(
     // 12. Flatten and broadcast chord_array_
     // =========================================================
 
-    std::vector<su2double> flat_array(M * 7);
-
+    std::vector<double> flat_array(M * 7);
     if (rank == MASTER_NODE)
     {
         for (int i = 0; i < M; ++i)
-        {
             for (int k = 0; k < 7; ++k)
-            {
-                flat_array[i * 7 + k] =
-                    chord_array_[i][k];
-            }
-        }
+                flat_array[i * 7 + k] = SU2_TYPE::GetValue(chord_array_[i][k]);
     }
+#ifdef HAVE_MPI
+    MPI_Bcast(flat_array.data(), M * 7, MPI_DOUBLE,
+              MASTER_NODE, SU2_MPI::GetComm());
+#endif
 
-    SU2_MPI::Bcast(
-        flat_array.data(),
-        M * 7,
-        MPI_DOUBLE,
-        MASTER_NODE,
-        SU2_MPI::GetComm());
-
-    // =========================================================
-    // 13. Reconstruct chord_array_ on non-master ranks
-    // =========================================================
-
-    if (rank != MASTER_NODE)
+    // Reconstruct the passive reference geometry on every rank.
+    chord_array_.clear();
+    chord_array_.resize(M);
+    for (int i = 0; i < M; ++i)
     {
-        chord_array_.resize(M);
-
-        for (int i = 0; i < M; ++i)
-        {
-            chord_array_[i] = {
-                flat_array[i * 7 + 0],
-                flat_array[i * 7 + 1],
-                flat_array[i * 7 + 2],
-                flat_array[i * 7 + 3],
-                flat_array[i * 7 + 4],
-                flat_array[i * 7 + 5],
-                flat_array[i * 7 + 6]
-            };
-        }
+        chord_array_[i] = {
+            flat_array[i * 7 + 0], flat_array[i * 7 + 1],
+            flat_array[i * 7 + 2], flat_array[i * 7 + 3],
+            flat_array[i * 7 + 4], flat_array[i * 7 + 5],
+            flat_array[i * 7 + 6]
+        };
     }
 
     // =========================================================
@@ -3221,6 +3197,8 @@ void CSurfaceMovement::getRotationPoint(
 
     N_out = M;
 }
+
+
 
 su2double CSurfaceMovement::SetCartesianCoord(CGeometry* geometry, CConfig* config, CFreeFormDefBox* FFDBox,
                                               unsigned short iFFDBox, bool ResetDef) 
