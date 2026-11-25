@@ -46,9 +46,20 @@ CSurfaceMovement::CSurfaceMovement() : CGridMovement() {
   nFFDBox = 0;
   nLevel = 0;
   FFDBoxDefinition = false;
+  tangent_normal_array_ = nullptr;
+  N_tangent_ = 0;
+  Num_slice = 0;
 }
 
-CSurfaceMovement::~CSurfaceMovement() = default;
+CSurfaceMovement::~CSurfaceMovement() {
+  if (tangent_normal_array_ != nullptr) {
+    for (int i = 0; i < N_tangent_; ++i)
+      delete[] tangent_normal_array_[i];
+    delete[] tangent_normal_array_;
+  }
+  tangent_normal_array_ = nullptr;
+  N_tangent_ = 0;
+}
 
 vector<vector<su2double> > CSurfaceMovement::SetSurface_Deformation(CGeometry* geometry, CConfig* config) 
 {
@@ -1680,6 +1691,10 @@ void CSurfaceMovement::ApplyDesignVariables(CGeometry* geometry, CConfig* config
                                             unsigned short iFFDBox) {
   unsigned short iDV;
 
+  // Cache only within this deformation pass for the current FFD box.
+  // A new call always reconstructs the reference geometry on demand.
+  bool twist_reference_ready = false;
+
   if (rank == MASTER_NODE)
   {
     std::cout << "Updating position of FFD control points  using ApplyDesignVariables(..)" <<std::endl;
@@ -1718,39 +1733,28 @@ void CSurfaceMovement::ApplyDesignVariables(CGeometry* geometry, CConfig* config
 
       case FFD_TWIST:
       {
-        // NEED an adaptive twist deformation 
-        /* Break this down into three steps:
-          
-          
-          STEP 3: Apply twist about the ROTATION POINT and along the local TANGENT VECTOR
-        */
-        if (rank == MASTER_NODE)
+        if (config->GetFFDTag(iDV) != FFDBox[iFFDBox]->GetTag())
+          break;
+
+        if (!twist_reference_ready)
         {
-          std::cout << "Computing local rotation point for each FFD-j index" << std::endl;
+          // The wrapper builds and validates the reference line, releases
+          // previous tangent storage, and applies the first twist DV.
+          ApplyFFDTwist(geometry, config, FFDBox[iFFDBox], FFDBox,
+                        iFFDBox, iDV, false);
+
+          // SetFFDTwist may return false for a fixed J-plane even when
+          // preprocessing succeeded. Check the reference data instead.
+          twist_reference_ready =
+              Num_slice >= 2 && tangent_normal_array_ != nullptr &&
+              N_tangent_ == Num_slice;
         }
-
-        //STEP 1: Compute the rotation point along FFD slice location
-        getRotationPoint(geometry, config, FFDBox[iFFDBox], iFFDBox, Num_slice);
-
-        if (rank == MASTER_NODE)
+        else
         {
-          std::cout << "Computing local normal and tangent vectors for each FFD-j index" <<std::endl;
-        }
-
-        //STEP 2: Compute the local TANGENT and VECTOR
-        int N_tangent = 0;
-        su2double** tn_array = getNormalVector(geometry, config, FFDBox[iFFDBox], iFFDBox, N_tangent);
-
-        // Store so SetFFDTwist() can use them
-        tangent_normal_array_ = tn_array;
-        N_tangent_ = N_tangent;
-
-        // STEP 3: apply twist using local rotation point + local tangent vector
-        SetFFDTwist(geometry, config, FFDBox[iFFDBox], FFDBox, iDV, false);
-
-        if (rank == MASTER_NODE)
-        {
-          std::cout <<"Done computing local twist deformations" <<std::endl;
+          // The surface geometry is unchanged until SetCartesianCoord.
+          // Reuse the reference line for subsequent twist DVs in this pass.
+          SetFFDTwist(geometry, config, FFDBox[iFFDBox], FFDBox,
+                      iDV, false);
         }
         break;
       }
@@ -4119,41 +4123,116 @@ bool CSurfaceMovement::SetFFDTaper(CGeometry* geometry, CConfig* config, CFreeFo
 return true;
 }
 
-/* This is called by SU2_GEO to evaluate surface-adaptive gradients */
-bool CSurfaceMovement::ApplyFFDTwist(CGeometry* geometry, CConfig* config,
-                                     CFreeFormDefBox* FFDBox,
-                                     CFreeFormDefBox** ResetFFDBox,
-                                     unsigned short iFFDBox,
-                                     unsigned short iDV,
-                                     bool ResetDef)
+
+bool CSurfaceMovement::ApplyFFDTwist(
+    CGeometry* geometry,
+    CConfig* config,
+    CFreeFormDefBox* FFDBox,
+    CFreeFormDefBox** ResetFFDBox,
+    unsigned short iFFDBox,
+    unsigned short iDV,
+    bool ResetDef)
 {
-  if (rank == MASTER_NODE) {
-    std::cout << "ApplyFFDTwist: precomputing rotation points and tangents\n";
-  }
+    // Check whether this DV belongs to the current FFD box.
+    // Do this before constructing the quarter-chord reference line.
 
-  // STEP 1: rotation points (fills chord_array_ and sets Num_slice via N_out)
-  int Num_slice_local = 0;
-  getRotationPoint(geometry, config, FFDBox, iFFDBox, Num_slice_local);
-  //Num_slice_local is computed inside getRotationPoint()
-  Num_slice = Num_slice_local; 
-
-  // STEP 2: tangents/normals (fills tangent_normal_array_, N_tangent_)
-  // Free any previous tangent_normal_array_ to avoid leaks
-  if (tangent_normal_array_ != nullptr) {
-    for (int i = 0; i < N_tangent_; ++i) {
-      delete[] tangent_normal_array_[i];
+    if (config->GetFFDTag(iDV) != FFDBox->GetTag())
+    {
+        return false;
     }
-    delete[] tangent_normal_array_;
-    tangent_normal_array_ = nullptr;
-  }
 
-  int N_tangent_local = 0;
-  su2double** tn_array = getNormalVector(geometry, config, FFDBox, iFFDBox, N_tangent_local);
-  tangent_normal_array_ = tn_array;
-  N_tangent_ = N_tangent_local;
+    if (rank == MASTER_NODE)
+    {
+        std::cout
+            << "ApplyFFDTwist: precomputing rotation points "
+            << "and tangents for FFD box '"
+            << FFDBox->GetTag()
+            << "'" << std::endl;
+    }
 
-  // STEP 3: now do the actual twist with the low–level routine
-  return SetFFDTwist(geometry, config, FFDBox, ResetFFDBox, iDV, ResetDef);
+    // STEP 1: Construct rotation points.
+
+    int Num_slice_local = 0;
+
+    getRotationPoint(
+        geometry,
+        config,
+        FFDBox,
+        iFFDBox,
+        Num_slice_local);
+
+    Num_slice = Num_slice_local;
+
+    // STEP 2: Release previously allocated tangent data.
+
+    if (tangent_normal_array_ != nullptr)
+    {
+        for (int i = 0; i < N_tangent_; ++i)
+        {
+            delete[] tangent_normal_array_[i];
+        }
+
+        delete[] tangent_normal_array_;
+        tangent_normal_array_ = nullptr;
+    }
+
+    N_tangent_ = 0;
+
+    // Validate the rotation points.
+
+    if (Num_slice < 2)
+    {
+        if (rank == MASTER_NODE)
+        {
+            std::cerr
+                << "ERROR: ApplyFFDTwist: insufficient "
+                << "rotation points for FFD box '"
+                << FFDBox->GetTag()
+                << "'" << std::endl;
+        }
+
+        return false;
+    }
+
+    // STEP 3: Construct tangent and normal vectors.
+
+    int N_tangent_local = 0;
+
+    tangent_normal_array_ = getNormalVector(
+        geometry,
+        config,
+        FFDBox,
+        iFFDBox,
+        N_tangent_local);
+
+    N_tangent_ = N_tangent_local;
+
+    // Validate tangent data.
+
+    if (tangent_normal_array_ == nullptr ||
+        N_tangent_ != Num_slice)
+    {
+        if (rank == MASTER_NODE)
+        {
+            std::cerr
+                << "ERROR: ApplyFFDTwist: invalid tangent "
+                << "array for FFD box '"
+                << FFDBox->GetTag()
+                << "'" << std::endl;
+        }
+
+        return false;
+    }
+
+    // STEP 4: Apply the twist deformation.
+
+    return SetFFDTwist(
+        geometry,
+        config,
+        FFDBox,
+        ResetFFDBox,
+        iDV,
+        ResetDef);
 }
 
 bool CSurfaceMovement::SetFFDTwist(CGeometry* geometry, CConfig* config, CFreeFormDefBox* FFDBox,
